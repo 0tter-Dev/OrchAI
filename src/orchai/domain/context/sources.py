@@ -1,0 +1,17 @@
+"""Context source vocabulary."""
+
+from enum import StrEnum
+
+
+class ContextSource(StrEnum):
+    """Supported context source categories."""
+
+    TASK_DEFINITION = "TASK_DEFINITION"
+    PROJECT_DOCUMENTATION = "PROJECT_DOCUMENTATION"
+    SOURCE_FILE = "SOURCE_FILE"
+    CONFIGURATION = "CONFIGURATION"
+    GIT_HISTORY = "GIT_HISTORY"
+    PREVIOUS_EXECUTION = "PREVIOUS_EXECUTION"
+    EXECUTION_RESULT = "EXECUTION_RESULT"
+    EXTERNAL_REFERENCE = "EXTERNAL_REFERENCE"
+

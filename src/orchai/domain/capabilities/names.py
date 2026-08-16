@@ -1,0 +1,18 @@
+"""Capability vocabulary."""
+
+from enum import StrEnum
+
+
+class CapabilityName(StrEnum):
+    """Initial capability set."""
+
+    READ_PROJECT = "READ_PROJECT"
+    READ_DOCUMENTATION = "READ_DOCUMENTATION"
+    WRITE_SOURCE = "WRITE_SOURCE"
+    WRITE_DOCUMENTATION = "WRITE_DOCUMENTATION"
+    RUN_TESTS = "RUN_TESTS"
+    RUN_COMMANDS = "RUN_COMMANDS"
+    USE_LOCAL_MODEL = "USE_LOCAL_MODEL"
+    USE_CLOUD_MODEL = "USE_CLOUD_MODEL"
+    ACCESS_GIT = "ACCESS_GIT"
+

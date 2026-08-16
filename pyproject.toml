@@ -1,0 +1,36 @@
+[project]
+name = "orchai"
+version = "0.1.0"
+description = "Generic AI-assisted software development orchestration system."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.16",
+    "fastapi>=0.116",
+    "httpx>=0.28",
+    "pydantic>=2.11",
+    "psycopg[binary]>=3.2",
+    "sqlalchemy>=2.0",
+    "typer>=0.16",
+]
+
+[project.scripts]
+orchai = "orchai.interfaces.cli.main:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
