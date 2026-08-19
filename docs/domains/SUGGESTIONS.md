@@ -49,6 +49,17 @@ ACCEPTED / REJECTED / EXPIRED
 
 Acceptance does not bypass authorization.
 
+## Current Implementation
+
+The initial implementation generates a next-step suggestion from task
+state. A `PLANNED` task suggests `DEVELOPER` + `IMPLEMENT`, and an
+`IMPLEMENTED` task suggests `QUALITY_AGENT` + `REVIEW`.
+
+The Orchestrator enforces execution mode before requesting
+authorization: `SUGGESTED` presents the suggestion until explicit
+approval, while `AUTOMATIC` proceeds only when the configured automatic
+policy allows the suggested role/action pair.
+
 ## Execution Modes
 
 ### SUGGESTED

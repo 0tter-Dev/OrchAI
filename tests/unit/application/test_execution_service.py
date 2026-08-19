@@ -253,3 +253,65 @@ def test_execution_service_records_completion_result() -> None:
         assert events.published_events[-1].event_type is EventType.EXECUTION_COMPLETED
 
     asyncio.run(run())
+
+
+def test_execution_service_retry_creates_distinct_attempts() -> None:
+    async def run() -> None:
+        authorization_repository = InMemoryAuthorizationRepository()
+        execution_repository = InMemoryExecutionRepository()
+        events = InProcessEventDispatcher()
+        authorization_service = AuthorizationService(
+            repository=authorization_repository,
+            event_publisher=events,
+        )
+        execution_service = ExecutionService(
+            repository=execution_repository,
+            authorization_repository=authorization_repository,
+            event_publisher=events,
+        )
+        task_id = TaskId.new()
+        model_id = ModelId("codex")
+        authorization = await authorization_service.request_authorization(
+            RequestAuthorizationCommand(
+                task_id=task_id,
+                role=RoleName.DEVELOPER,
+                action=ActionName.IMPLEMENT,
+                model_id=model_id,
+                reason="Implement the requested task.",
+                requester="user",
+                execution_mode=ExecutionMode.SUGGESTED,
+            )
+        )
+        await authorization_service.decide_authorization(
+            DecideAuthorizationCommand(
+                authorization_id=authorization.id,
+                status=AuthorizationDecisionStatus.GRANTED,
+                decided_by="user",
+                reason="Approved.",
+            )
+        )
+
+        first = await execution_service.request_execution(
+            RequestExecutionCommand(
+                task_id=task_id,
+                role=RoleName.DEVELOPER,
+                action=ActionName.IMPLEMENT,
+                model_id=model_id,
+                authorization_id=authorization.id,
+            )
+        )
+        second = await execution_service.request_execution(
+            RequestExecutionCommand(
+                task_id=task_id,
+                role=RoleName.DEVELOPER,
+                action=ActionName.IMPLEMENT,
+                model_id=model_id,
+                authorization_id=authorization.id,
+            )
+        )
+
+        assert first.id != second.id
+        assert first.task_id == second.task_id
+        assert first.authorization_id == second.authorization_id
+
+    asyncio.run(run())

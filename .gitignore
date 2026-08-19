@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+.pytest-tmp/
 .ruff_cache/
 .mypy_cache/
 .coverage
@@ -39,4 +40,3 @@ tmp/
 *.swp
 Thumbs.db
 .DS_Store
-

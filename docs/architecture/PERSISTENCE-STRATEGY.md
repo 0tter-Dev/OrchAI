@@ -32,16 +32,20 @@ Tasks
 Authorization Requests
 Authorization Decisions
 Executions
+Events
+Audit Records
+Context Resolution Metadata
+Metric Records
+Suggestions
 ```
 
 This implementation is intentionally infrastructure-bound and uses the
 same application repository contracts as the in-memory repositories.
 
 The accepted target remains SQLAlchemy 2.x with PostgreSQL as the
-primary database. The next persistence step is to formalize the migration
-workflow for PostgreSQL, expand durable event/audit storage, and validate
-the same repositories against PostgreSQL without changing domain models
-or application use cases.
+primary database. The current migrations are validated against SQLite
+and the configured local PostgreSQL database without changing domain
+models or application use cases.
 
 The CLI includes a local PostgreSQL setup helper for environments where
 the PostgreSQL server is already running but the target database has not
@@ -118,6 +122,18 @@ If an execution requires a reproducible historical context snapshot, the
 implementation may persist a bounded snapshot or artifact explicitly.
 This is an execution-history decision, not a requirement to mirror the
 project.
+
+The current implementation persists resolved-context metadata such as
+execution, project, source, resource, content hash, byte size, timestamp,
+and adapter metadata. It does not persist the resolved file content.
+
+## Metrics and Suggestions Persistence
+
+The current implementation persists event-derived execution metrics and
+task-state suggestions through the same repository contracts used by the
+runtime. Metrics are derived from authoritative execution records and
+events; suggestions remain non-authoritative and record their lifecycle
+status separately from authorization decisions.
 
 ## Repository Boundary
 

@@ -4,6 +4,7 @@ from orchai.domain.context.entities import (
     ContextItem,
     ContextPackage,
     ContextReference,
+    ContextResolutionRecord,
 )
 from orchai.domain.context.errors import ContextError, UnauthorizedContextError
 from orchai.domain.context.sources import ContextSource
@@ -13,7 +14,7 @@ __all__ = [
     "ContextItem",
     "ContextPackage",
     "ContextReference",
+    "ContextResolutionRecord",
     "ContextSource",
     "UnauthorizedContextError",
 ]
-

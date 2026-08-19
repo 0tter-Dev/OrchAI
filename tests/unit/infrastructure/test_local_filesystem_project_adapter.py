@@ -45,3 +45,24 @@ def test_local_filesystem_adapter_rejects_path_escape(tmp_path) -> None:
             )
 
     asyncio.run(run())
+
+
+def test_local_filesystem_adapter_discovers_resource_metadata(tmp_path) -> None:
+    async def run() -> None:
+        (tmp_path / "README.md").write_text("# Docs", encoding="utf-8")
+        source = tmp_path / "src"
+        source.mkdir()
+        (source / "app.py").write_text("print('hello')", encoding="utf-8")
+        hidden = tmp_path / ".git"
+        hidden.mkdir()
+        (hidden / "config").write_text("ignored", encoding="utf-8")
+        adapter = LocalFilesystemProjectAdapter(tmp_path)
+
+        discovery = await adapter.discover(limit=10)
+
+        resources = {resource.resource: resource for resource in discovery.resources}
+        assert set(resources) == {"README.md", "src/app.py"}
+        assert resources["README.md"].source is ContextSource.PROJECT_DOCUMENTATION
+        assert resources["src/app.py"].source is ContextSource.SOURCE_FILE
+
+    asyncio.run(run())

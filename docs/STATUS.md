@@ -84,12 +84,18 @@ ADRs for the major implementation decisions.
 
 The implementation now has a minimal executable foundation covering task
 lifecycle, authorization, execution, context resolution, project adapter
-boundaries, a CLI-oriented local flow, and SQLite-backed durable
-persistence for the initial operational aggregates.
+boundaries, a central application Orchestrator for the initial local
+flow, an async Execution Engine with a replaceable AI Provider Adapter
+boundary, filesystem Project Adapter discovery, context-resolution
+metadata, event-derived audit and metrics records, task-state
+suggestions with initial execution-mode enforcement, an initial policy
+slice kept separate from authorization, and
+SQLAlchemy-backed durable persistence for the initial operational and
+historical aggregates.
 
-The next implementation focus is persistence hardening:
-PostgreSQL migration validation, event/audit durability, and a clearer
-application bootstrap.
+The next implementation focus is orchestration expansion and interface
+growth: richer policy configuration, provider configuration,
+provider-specific validation, and public API surface.
 
 ## Source of Truth
 

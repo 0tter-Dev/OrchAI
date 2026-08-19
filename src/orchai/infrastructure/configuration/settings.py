@@ -66,8 +66,30 @@ class OrchAISettings(BaseModel):
     database: DatabaseSettings
 
 
-def load_settings() -> OrchAISettings:
+def load_settings(env_file: Path | None = Path(".env")) -> OrchAISettings:
     """Load effective settings from environment with safe local defaults."""
 
-    database_url = os.environ.get("ORCHAI_DATABASE_URL", "sqlite:///.orchai/orchai.db")
+    dotenv_values = _read_dotenv(env_file) if env_file is not None else {}
+    database_url = os.environ.get(
+        "ORCHAI_DATABASE_URL",
+        dotenv_values.get("ORCHAI_DATABASE_URL", "sqlite:///.orchai/orchai.db"),
+    )
     return OrchAISettings(database=DatabaseSettings(url=database_url))
+
+
+def _read_dotenv(path: Path) -> dict[str, str]:
+    dotenv_path = path.expanduser()
+    if not dotenv_path.exists():
+        return {}
+
+    values: dict[str, str] = {}
+    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", maxsplit=1)
+        key = key.strip()
+        if not key:
+            continue
+        values[key] = value.strip().strip('"').strip("'")
+    return values

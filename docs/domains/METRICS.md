@@ -34,6 +34,14 @@ Authorization
 
 The UI is never the source of truth.
 
+## Current Implementation
+
+The initial implementation includes an event subscriber that derives
+execution metrics from persisted execution records after
+`EXECUTION_COMPLETED` and `EXECUTION_FAILED` events. It currently records
+duration, success/failure counters, token usage, and estimated cost when
+the provider result includes those values.
+
 ## Dimensions
 
 Metrics may be grouped by:

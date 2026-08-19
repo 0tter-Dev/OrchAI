@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Column, ForeignKey, Integer, MetaData, Table, Text
+from sqlalchemy import Column, Float, ForeignKey, Integer, MetaData, Table, Text
 
 metadata = MetaData()
 
@@ -84,3 +84,83 @@ executions_table = Table(
     Column("result_metadata", Text),
 )
 
+events_table = Table(
+    "events",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("event_type", Text, nullable=False),
+    Column("occurred_at", Text, nullable=False),
+    Column("source", Text, nullable=False),
+    Column("task_id", Text, ForeignKey("tasks.id")),
+    Column("project_id", Text, ForeignKey("projects.id")),
+    Column("execution_id", Text, ForeignKey("executions.id")),
+    Column("correlation_id", Text),
+    Column("causation_id", Text),
+    Column("payload", Text, nullable=False),
+)
+
+audit_records_table = Table(
+    "audit_records",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("occurred_at", Text, nullable=False),
+    Column("actor", Text, nullable=False),
+    Column("operation", Text, nullable=False),
+    Column("outcome", Text, nullable=False),
+    Column("task_id", Text, ForeignKey("tasks.id")),
+    Column("project_id", Text, ForeignKey("projects.id")),
+    Column("execution_id", Text, ForeignKey("executions.id")),
+    Column("authorization_id", Text, ForeignKey("authorization_requests.id")),
+    Column("event_id", Text, ForeignKey("events.id"), unique=True),
+    Column("correlation_id", Text),
+    Column("causation_id", Text),
+    Column("metadata", Text, nullable=False),
+)
+
+context_resolution_records_table = Table(
+    "context_resolution_records",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("execution_id", Text, ForeignKey("executions.id"), nullable=False),
+    Column("project_id", Text, ForeignKey("projects.id"), nullable=False),
+    Column("source", Text, nullable=False),
+    Column("resource", Text, nullable=False),
+    Column("scope", Text),
+    Column("version", Text),
+    Column("content_sha256", Text, nullable=False),
+    Column("content_bytes", Integer, nullable=False),
+    Column("resolved_at", Text, nullable=False),
+    Column("metadata", Text, nullable=False),
+)
+
+metric_records_table = Table(
+    "metric_records",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("observed_at", Text, nullable=False),
+    Column("name", Text, nullable=False),
+    Column("value", Float, nullable=False),
+    Column("unit", Text, nullable=False),
+    Column("task_id", Text, ForeignKey("tasks.id")),
+    Column("project_id", Text, ForeignKey("projects.id")),
+    Column("execution_id", Text, ForeignKey("executions.id")),
+    Column("dimensions", Text, nullable=False),
+)
+
+suggestions_table = Table(
+    "suggestions",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("task_id", Text, ForeignKey("tasks.id"), nullable=False),
+    Column("related_execution_id", Text, ForeignKey("executions.id")),
+    Column("suggested_role", Text, nullable=False),
+    Column("suggested_action", Text, nullable=False),
+    Column("rationale", Text, nullable=False),
+    Column("required_capabilities", Text, nullable=False),
+    Column("expected_impact", Text, nullable=False),
+    Column("authorization_required", Integer, nullable=False),
+    Column("confidence", Float),
+    Column("status", Text, nullable=False),
+    Column("generated_at", Text, nullable=False),
+    Column("metadata", Text, nullable=False),
+)

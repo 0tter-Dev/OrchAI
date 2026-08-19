@@ -31,20 +31,31 @@ distinguishes architectural decisions from implementation progress.
 The following are intentionally pending until their implementation
 exists:
 
--   dependency-rule enforcement;
--   PostgreSQL migration validation;
--   provider adapter contract validation;
--   runtime failure/recovery validation;
 -   performance and concurrency validation.
 
 The following have initial implementation validation:
 
 -   task, authorization, execution, context, and project-adapter
     boundaries;
--   in-process event dispatch;
--   SQLAlchemy-backed SQLite migration execution for the initial local
-    schema;
--   Typer CLI local orchestration and migration commands;
+-   central application Orchestrator composition for the initial flow;
+-   initial policy boundary kept separate from authorization decisions;
+-   async Execution Engine dispatch through a provider-independent
+    `AIProviderPort`;
+-   stub AI provider adapter and local Ollama adapter boundary;
+-   provider-result contract validation and boundary-classified failure
+    mapping;
+-   filesystem Project Adapter discovery and authorized context reads;
+-   context-resolution metadata persistence without copying project
+    content;
+-   durable in-process event dispatch with audit consumption;
+-   idempotent metric derivation from authoritative execution events;
+-   SQLAlchemy-backed SQLite and PostgreSQL migration execution for
+    operational state, event history, audit records, and
+    context-resolution metadata;
+-   Typer CLI local orchestration, migration, event, audit, and project
+    discovery commands;
+-   dependency-rule enforcement tests and runtime failure/recovery
+    validation;
 -   unit and integration tests for the implemented foundation.
 
 ## Current Phase
@@ -54,8 +65,10 @@ The following have initial implementation validation:
 The project has a consolidated architectural, domain, technology,
 repository-structure, and decision-record foundation.
 
-The implementation now includes the first executable slices and is moving
-toward durable configuration and persistence.
+The implementation now includes the first executable slices, durable
+history for events and audit records, resolved-context metadata, a
+filesystem Project Adapter boundary, and a replaceable AI provider
+boundary for execution.
 
 ## Status Rule
 

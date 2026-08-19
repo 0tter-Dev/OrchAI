@@ -62,6 +62,22 @@ class EventId(Identifier):
     """Stable event identity."""
 
 
+class AuditRecordId(Identifier):
+    """Stable audit record identity."""
+
+
+class ContextResolutionId(Identifier):
+    """Stable resolved context metadata identity."""
+
+
+class MetricRecordId(Identifier):
+    """Stable metric record identity."""
+
+
+class SuggestionId(Identifier):
+    """Stable suggestion identity."""
+
+
 class CorrelationId(Identifier):
     """Stable correlation identity."""
 

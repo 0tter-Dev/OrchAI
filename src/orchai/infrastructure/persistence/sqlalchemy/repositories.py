@@ -9,11 +9,17 @@ from typing import Any
 
 from sqlalchemy import delete, insert, select, update
 
+from orchai.application.audit.ports import AuditRepository
 from orchai.application.authorization.ports import AuthorizationRepository
+from orchai.application.context.ports import ContextResolutionRepository
+from orchai.application.events.ports import EventRepository
 from orchai.application.executions.ports import ExecutionRepository
+from orchai.application.metrics.ports import MetricsRepository
 from orchai.application.projects.ports import ProjectRepository
+from orchai.application.suggestions.ports import SuggestionRepository
 from orchai.application.tasks.ports import TaskRepository
 from orchai.domain.actions import ActionName
+from orchai.domain.audit import AuditRecord
 from orchai.domain.authorization import (
     Authorization,
     AuthorizationDecision,
@@ -22,29 +28,45 @@ from orchai.domain.authorization import (
     RequestedOperation,
 )
 from orchai.domain.capabilities import CapabilityName
+from orchai.domain.context import ContextReference, ContextResolutionRecord, ContextSource
 from orchai.domain.executions import (
     Execution,
     ExecutionResult,
     ExecutionState,
     ResourceUsage,
 )
+from orchai.domain.events import DomainEvent, EventType
 from orchai.domain.identifiers import (
+    AuditRecordId,
     AuthorizationDecisionId,
     AuthorizationId,
+    CausationId,
+    ContextResolutionId,
+    CorrelationId,
+    EventId,
     ExecutionId,
+    MetricRecordId,
     ModelId,
     ProjectId,
+    SuggestionId,
     TaskId,
 )
+from orchai.domain.metrics import MetricRecord
 from orchai.domain.projects import Project, ProjectStatus
 from orchai.domain.roles import RoleName
+from orchai.domain.suggestions import Suggestion, SuggestionStatus
 from orchai.domain.tasks import ExecutionMode, Task, TaskScope, TaskState
 from orchai.infrastructure.persistence.sqlalchemy.database import SQLAlchemyDatabase
 from orchai.infrastructure.persistence.sqlalchemy.tables import (
+    audit_records_table,
     authorization_decisions_table,
     authorization_requests_table,
+    context_resolution_records_table,
+    events_table,
     executions_table,
+    metric_records_table,
     projects_table,
+    suggestions_table,
     tasks_table,
 )
 
@@ -211,6 +233,197 @@ class SQLAlchemyExecutionRepository(ExecutionRepository):
                 )
 
 
+class SQLAlchemyEventRepository(EventRepository):
+    """SQLAlchemy-backed durable domain event history."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add(self, event: DomainEvent) -> None:
+        values = _event_to_values(event)
+        with self._database.engine.begin() as connection:
+            exists = connection.execute(
+                select(events_table.c.id).where(events_table.c.id == values["id"])
+            ).first()
+            if exists is None:
+                connection.execute(insert(events_table).values(**values))
+
+    async def list(
+        self,
+        *,
+        task_id: TaskId | None = None,
+        limit: int = 20,
+    ) -> tuple[DomainEvent, ...]:
+        query = select(events_table).order_by(
+            events_table.c.occurred_at.desc(),
+            events_table.c.id.desc(),
+        )
+        if task_id is not None:
+            query = query.where(events_table.c.task_id == str(task_id))
+        query = query.limit(_normalize_limit(limit))
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_event_from_row(row._mapping) for row in rows)
+
+
+class SQLAlchemyAuditRepository(AuditRepository):
+    """SQLAlchemy-backed append-oriented audit history."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add(self, record: AuditRecord) -> None:
+        values = _audit_record_to_values(record)
+        with self._database.engine.begin() as connection:
+            if record.event_id is not None:
+                existing_event_record = connection.execute(
+                    select(audit_records_table.c.id).where(
+                        audit_records_table.c.event_id == str(record.event_id)
+                    )
+                ).first()
+                if existing_event_record is not None:
+                    return
+
+            exists = connection.execute(
+                select(audit_records_table.c.id).where(
+                    audit_records_table.c.id == values["id"]
+                )
+            ).first()
+            if exists is None:
+                connection.execute(insert(audit_records_table).values(**values))
+
+    async def list(
+        self,
+        *,
+        task_id: TaskId | None = None,
+        limit: int = 20,
+    ) -> tuple[AuditRecord, ...]:
+        query = select(audit_records_table).order_by(
+            audit_records_table.c.occurred_at.desc(),
+            audit_records_table.c.id.desc(),
+        )
+        if task_id is not None:
+            query = query.where(audit_records_table.c.task_id == str(task_id))
+        query = query.limit(_normalize_limit(limit))
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_audit_record_from_row(row._mapping) for row in rows)
+
+
+class SQLAlchemyContextResolutionRepository(ContextResolutionRepository):
+    """SQLAlchemy-backed resolved context metadata repository."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add_many(self, records: tuple[ContextResolutionRecord, ...]) -> None:
+        with self._database.engine.begin() as connection:
+            for record in records:
+                values = _context_resolution_record_to_values(record)
+                exists = connection.execute(
+                    select(context_resolution_records_table.c.id).where(
+                        context_resolution_records_table.c.id == values["id"]
+                    )
+                ).first()
+                if exists is None:
+                    connection.execute(
+                        insert(context_resolution_records_table).values(**values)
+                    )
+
+    async def list_by_execution(
+        self,
+        execution_id: ExecutionId,
+    ) -> tuple[ContextResolutionRecord, ...]:
+        query = (
+            select(context_resolution_records_table)
+            .where(context_resolution_records_table.c.execution_id == str(execution_id))
+            .order_by(context_resolution_records_table.c.resolved_at)
+        )
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_context_resolution_record_from_row(row._mapping) for row in rows)
+
+
+class SQLAlchemyMetricsRepository(MetricsRepository):
+    """SQLAlchemy-backed operational metrics repository."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add_many(self, records: tuple[MetricRecord, ...]) -> None:
+        with self._database.engine.begin() as connection:
+            for record in records:
+                values = _metric_record_to_values(record)
+                exists = connection.execute(
+                    select(metric_records_table.c.id).where(
+                        metric_records_table.c.id == values["id"]
+                    )
+                ).first()
+                if exists is None:
+                    connection.execute(insert(metric_records_table).values(**values))
+
+    async def list(
+        self,
+        *,
+        task_id: TaskId | None = None,
+        limit: int = 20,
+    ) -> tuple[MetricRecord, ...]:
+        query = select(metric_records_table).order_by(
+            metric_records_table.c.observed_at.desc(),
+            metric_records_table.c.id.desc(),
+        )
+        if task_id is not None:
+            query = query.where(metric_records_table.c.task_id == str(task_id))
+        query = query.limit(_normalize_limit(limit))
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_metric_record_from_row(row._mapping) for row in rows)
+
+
+class SQLAlchemySuggestionRepository(SuggestionRepository):
+    """SQLAlchemy-backed suggestion repository."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add(self, suggestion: Suggestion) -> None:
+        await self.save(suggestion)
+
+    async def save(self, suggestion: Suggestion) -> None:
+        values = _suggestion_to_values(suggestion)
+        with self._database.engine.begin() as connection:
+            exists = connection.execute(
+                select(suggestions_table.c.id).where(
+                    suggestions_table.c.id == values["id"]
+                )
+            ).first()
+            if exists is None:
+                connection.execute(insert(suggestions_table).values(**values))
+            else:
+                connection.execute(
+                    update(suggestions_table)
+                    .where(suggestions_table.c.id == values["id"])
+                    .values(**values)
+                )
+
+    async def list(
+        self,
+        *,
+        task_id: TaskId | None = None,
+        limit: int = 20,
+    ) -> tuple[Suggestion, ...]:
+        query = select(suggestions_table).order_by(
+            suggestions_table.c.generated_at.desc(),
+            suggestions_table.c.id.desc(),
+        )
+        if task_id is not None:
+            query = query.where(suggestions_table.c.task_id == str(task_id))
+        query = query.limit(_normalize_limit(limit))
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_suggestion_from_row(row._mapping) for row in rows)
+
+
 def _task_to_values(task: Task) -> dict[str, Any]:
     return {
         "id": str(task.id),
@@ -305,6 +518,110 @@ def _execution_to_values(execution: Execution) -> dict[str, Any]:
         if result is not None
         else None,
         "result_metadata": _to_json(result.metadata) if result is not None else None,
+    }
+
+
+def _event_to_values(event: DomainEvent) -> dict[str, Any]:
+    return {
+        "id": str(event.event_id),
+        "event_type": event.event_type.value,
+        "occurred_at": event.occurred_at.isoformat(),
+        "source": event.source,
+        "task_id": str(event.task_id) if event.task_id is not None else None,
+        "project_id": str(event.project_id) if event.project_id is not None else None,
+        "execution_id": str(event.execution_id)
+        if event.execution_id is not None
+        else None,
+        "correlation_id": str(event.correlation_id)
+        if event.correlation_id is not None
+        else None,
+        "causation_id": str(event.causation_id)
+        if event.causation_id is not None
+        else None,
+        "payload": _to_json(event.payload),
+    }
+
+
+def _audit_record_to_values(record: AuditRecord) -> dict[str, Any]:
+    return {
+        "id": str(record.id),
+        "occurred_at": record.occurred_at.isoformat(),
+        "actor": record.actor,
+        "operation": record.operation,
+        "outcome": record.outcome,
+        "task_id": str(record.task_id) if record.task_id is not None else None,
+        "project_id": str(record.project_id) if record.project_id is not None else None,
+        "execution_id": str(record.execution_id)
+        if record.execution_id is not None
+        else None,
+        "authorization_id": str(record.authorization_id)
+        if record.authorization_id is not None
+        else None,
+        "event_id": str(record.event_id) if record.event_id is not None else None,
+        "correlation_id": str(record.correlation_id)
+        if record.correlation_id is not None
+        else None,
+        "causation_id": str(record.causation_id)
+        if record.causation_id is not None
+        else None,
+        "metadata": _to_json(record.metadata),
+    }
+
+
+def _context_resolution_record_to_values(
+    record: ContextResolutionRecord,
+) -> dict[str, Any]:
+    reference = record.reference
+    return {
+        "id": str(record.id),
+        "execution_id": str(record.execution_id),
+        "project_id": str(record.project_id),
+        "source": reference.source.value,
+        "resource": reference.resource,
+        "scope": reference.scope,
+        "version": reference.version,
+        "content_sha256": record.content_sha256,
+        "content_bytes": record.content_bytes,
+        "resolved_at": record.resolved_at.isoformat(),
+        "metadata": _to_json(record.metadata),
+    }
+
+
+def _metric_record_to_values(record: MetricRecord) -> dict[str, Any]:
+    return {
+        "id": str(record.id),
+        "observed_at": record.observed_at.isoformat(),
+        "name": record.name,
+        "value": record.value,
+        "unit": record.unit,
+        "task_id": str(record.task_id) if record.task_id is not None else None,
+        "project_id": str(record.project_id) if record.project_id is not None else None,
+        "execution_id": str(record.execution_id)
+        if record.execution_id is not None
+        else None,
+        "dimensions": _to_json(record.dimensions),
+    }
+
+
+def _suggestion_to_values(suggestion: Suggestion) -> dict[str, Any]:
+    return {
+        "id": str(suggestion.id),
+        "task_id": str(suggestion.task_id),
+        "related_execution_id": str(suggestion.related_execution_id)
+        if suggestion.related_execution_id is not None
+        else None,
+        "suggested_role": suggestion.suggested_role.value,
+        "suggested_action": suggestion.suggested_action.value,
+        "rationale": suggestion.rationale,
+        "required_capabilities": _to_json(
+            [capability.value for capability in suggestion.required_capabilities]
+        ),
+        "expected_impact": suggestion.expected_impact,
+        "authorization_required": int(suggestion.authorization_required),
+        "confidence": suggestion.confidence,
+        "status": suggestion.status.value,
+        "generated_at": suggestion.generated_at.isoformat(),
+        "metadata": _to_json(suggestion.metadata),
     }
 
 
@@ -413,6 +730,101 @@ def _execution_from_row(row: Mapping[str, Any]) -> Execution:
     return execution
 
 
+def _event_from_row(row: Mapping[str, Any]) -> DomainEvent:
+    return DomainEvent(
+        event_id=EventId(row["id"]),
+        event_type=EventType(row["event_type"]),
+        occurred_at=datetime.fromisoformat(row["occurred_at"]),
+        source=row["source"],
+        task_id=TaskId(row["task_id"]) if row["task_id"] else None,
+        project_id=ProjectId(row["project_id"]) if row["project_id"] else None,
+        execution_id=ExecutionId(row["execution_id"]) if row["execution_id"] else None,
+        correlation_id=CorrelationId(row["correlation_id"])
+        if row["correlation_id"]
+        else None,
+        causation_id=CausationId(row["causation_id"]) if row["causation_id"] else None,
+        payload=_from_json(row["payload"]),
+    )
+
+
+def _audit_record_from_row(row: Mapping[str, Any]) -> AuditRecord:
+    return AuditRecord(
+        id=AuditRecordId(row["id"]),
+        occurred_at=datetime.fromisoformat(row["occurred_at"]),
+        actor=row["actor"],
+        operation=row["operation"],
+        outcome=row["outcome"],
+        task_id=TaskId(row["task_id"]) if row["task_id"] else None,
+        project_id=ProjectId(row["project_id"]) if row["project_id"] else None,
+        execution_id=ExecutionId(row["execution_id"]) if row["execution_id"] else None,
+        authorization_id=AuthorizationId(row["authorization_id"])
+        if row["authorization_id"]
+        else None,
+        event_id=EventId(row["event_id"]) if row["event_id"] else None,
+        correlation_id=CorrelationId(row["correlation_id"])
+        if row["correlation_id"]
+        else None,
+        causation_id=CausationId(row["causation_id"]) if row["causation_id"] else None,
+        metadata=_from_json(row["metadata"]),
+    )
+
+
+def _context_resolution_record_from_row(
+    row: Mapping[str, Any],
+) -> ContextResolutionRecord:
+    return ContextResolutionRecord(
+        id=ContextResolutionId(row["id"]),
+        execution_id=ExecutionId(row["execution_id"]),
+        project_id=ProjectId(row["project_id"]),
+        reference=ContextReference(
+            source=ContextSource(row["source"]),
+            resource=row["resource"],
+            scope=row["scope"],
+            version=row["version"],
+        ),
+        content_sha256=row["content_sha256"],
+        content_bytes=row["content_bytes"],
+        resolved_at=datetime.fromisoformat(row["resolved_at"]),
+        metadata=_from_json(row["metadata"]),
+    )
+
+
+def _metric_record_from_row(row: Mapping[str, Any]) -> MetricRecord:
+    return MetricRecord(
+        id=MetricRecordId(row["id"]),
+        observed_at=datetime.fromisoformat(row["observed_at"]),
+        name=row["name"],
+        value=row["value"],
+        unit=row["unit"],
+        task_id=TaskId(row["task_id"]) if row["task_id"] else None,
+        project_id=ProjectId(row["project_id"]) if row["project_id"] else None,
+        execution_id=ExecutionId(row["execution_id"]) if row["execution_id"] else None,
+        dimensions=_from_json(row["dimensions"]),
+    )
+
+
+def _suggestion_from_row(row: Mapping[str, Any]) -> Suggestion:
+    return Suggestion(
+        id=SuggestionId(row["id"]),
+        task_id=TaskId(row["task_id"]),
+        related_execution_id=ExecutionId(row["related_execution_id"])
+        if row["related_execution_id"]
+        else None,
+        suggested_role=RoleName(row["suggested_role"]),
+        suggested_action=ActionName(row["suggested_action"]),
+        rationale=row["rationale"],
+        required_capabilities=frozenset(
+            CapabilityName(value) for value in _from_json(row["required_capabilities"])
+        ),
+        expected_impact=row["expected_impact"],
+        authorization_required=bool(row["authorization_required"]),
+        confidence=row["confidence"],
+        status=SuggestionStatus(row["status"]),
+        generated_at=datetime.fromisoformat(row["generated_at"]),
+        metadata=_from_json(row["metadata"]),
+    )
+
+
 def _resource_usage_to_dict(resource_usage: ResourceUsage) -> dict[str, Any]:
     return {
         "input_tokens": resource_usage.input_tokens,
@@ -442,3 +854,8 @@ def _from_json(value: str | None) -> Any:
         return []
     return json.loads(value)
 
+
+def _normalize_limit(limit: int) -> int:
+    if limit < 1:
+        return 1
+    return min(limit, 100)

@@ -35,6 +35,7 @@ class InProcessEventDispatcher:
 
     def __init__(self) -> None:
         self._handlers: dict[EventType, list[EventHandlerFn]] = defaultdict(list)
+        self._global_handlers: list[EventHandlerFn] = []
         self._published: list[DomainEvent] = []
         self._failures: list[EventDispatchFailure] = []
 
@@ -49,11 +50,14 @@ class InProcessEventDispatcher:
     def subscribe(self, event_type: EventType, handler: EventHandlerFn) -> None:
         self._handlers[event_type].append(handler)
 
+    def subscribe_all(self, handler: EventHandlerFn) -> None:
+        self._global_handlers.append(handler)
+
     async def publish(self, event: DomainEvent) -> None:
         self._published.append(event)
         failures: list[EventDispatchFailure] = []
 
-        for handler in self._handlers[event.event_type]:
+        for handler in (*self._global_handlers, *self._handlers[event.event_type]):
             try:
                 result = handler(event)
                 if inspect.isawaitable(result):
@@ -73,4 +77,3 @@ class InProcessEventDispatcher:
 
 def _handler_name(handler: EventHandlerFn) -> str:
     return getattr(handler, "__qualname__", repr(handler))
-

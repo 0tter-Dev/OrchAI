@@ -22,9 +22,9 @@ individual domain documents.
   Context         `PARTIAL`   [`CONTEXT.md`](CONTEXT.md)
   Projects        `PARTIAL`   [`PROJECTS.md`](PROJECTS.md)
   Capabilities    `PARTIAL`   [`CAPABILITIES.md`](CAPABILITIES.md)
-  Audit           `DEFINED`   [`AUDIT.md`](AUDIT.md)
-  Metrics         `DEFINED`   [`METRICS.md`](METRICS.md)
-  Suggestions     `DEFINED`   [`SUGGESTIONS.md`](SUGGESTIONS.md)
+  Audit           `PARTIAL`   [`AUDIT.md`](AUDIT.md)
+  Metrics         `PARTIAL`   [`METRICS.md`](METRICS.md)
+  Suggestions     `PARTIAL`   [`SUGGESTIONS.md`](SUGGESTIONS.md)
   Configuration   `PARTIAL`   [`CONFIGURATION.md`](CONFIGURATION.md)
 
 ## Implementation State
@@ -46,10 +46,19 @@ Domain Integration
 Implemented domain slices currently include task state transitions,
 authorization requests and decisions, execution lifecycle,
 role/action/model/capability vocabularies, context references/packages,
-and external project metadata.
+context-resolution metadata, external project metadata, filesystem
+Project Adapter discovery, domain events, initial audit records,
+event-derived execution metrics, task-state suggestions, initial
+execution-mode enforcement, an initial policy slice at the application
+boundary, and the first provider-independent execution adapter
+boundary.
 
-Audit, metrics, suggestions, policy, and provider adapter domains remain
-definition-first and are not yet implemented as validated code.
+Metrics and suggestions are implemented only for the first operational
+slice. Policy is now implemented only for the initial local flow and is
+not yet a fully configurable engine. Audit is implemented only for the
+initial event-derived history path. Project integration is limited to
+the initial filesystem adapter, and provider integration is limited to
+the initial execution port plus stub/Ollama adapters.
 
 ## Open Conceptual Areas
 

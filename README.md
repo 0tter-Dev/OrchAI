@@ -17,21 +17,24 @@ Implemented and tested:
 
 - task lifecycle and state transitions;
 - authorization requests and decisions;
+- first policy slice separated from authorization;
 - execution lifecycle and results;
+- async execution through a provider-independent AI adapter boundary;
 - role, action, model, and capability vocabularies;
-- context references and context packages;
-- local filesystem project adapter;
-- Typer CLI with a minimal local flow;
-- SQLAlchemy persistence with SQLite support and initial migrations.
+- context references, context packages, and context-resolution metadata;
+- local filesystem project adapter discovery and context reads;
+- durable event and audit history;
+- operational metrics derived from execution events with idempotent record ids;
+- task-state suggestions with `SUGGESTED`/`AUTOMATIC` enforcement;
+- architectural boundary checks for layer imports;
+- Typer CLI with a minimal local flow and inspection commands;
+- SQLAlchemy persistence with SQLite and PostgreSQL migration support.
 
 Still pending or partial:
 
-- durable event/audit persistence;
-- metrics and suggestions;
-- policy engine;
-- AI provider adapters;
+- richer policy configuration beyond the initial local policy slice;
+- provider configuration and richer provider adapter contracts;
 - FastAPI interface;
-- PostgreSQL integration validation;
 - deployment/container setup.
 
 ## Requirements
@@ -54,7 +57,8 @@ environment directly:
 
 ## Configuration
 
-The current configuration surface is environment-backed.
+The current configuration surface reads the process environment first
+and then a local `.env` file.
 
 ``` powershell
 $env:ORCHAI_DATABASE_URL = "sqlite:///.orchai/orchai.db"
@@ -86,12 +90,35 @@ uv run orchai db migrate
 Run the minimal local orchestration flow:
 
 ``` powershell
-uv run orchai local-flow . docs/INDEX.md --title "Local flow"
+uv run orchai local-flow . docs/INDEX.md --title "Local flow" --approve-suggestion
 ```
 
 The local flow registers a project, creates a task, records explicit
 authorization, creates an execution, resolves only authorized context,
-and completes the execution.
+and completes the execution. Without `--approve-suggestion`, the default
+`SUGGESTED` mode presents the generated suggestion and stops before
+authorization/execution.
+
+Run the same initial operation through bounded automatic mode:
+
+``` powershell
+uv run orchai local-flow . docs/INDEX.md --execution-mode AUTOMATIC
+```
+
+Discover project resources through the filesystem Project Adapter:
+
+``` powershell
+uv run orchai projects discover . --limit 20
+```
+
+Inspect persisted history:
+
+``` powershell
+uv run orchai events list --limit 10
+uv run orchai audit list --limit 10
+uv run orchai metrics list --limit 10
+uv run orchai suggestions list --limit 10
+```
 
 ## Tests
 
@@ -100,7 +127,9 @@ uv run pytest
 ```
 
 The current suite covers unit and integration behavior, including CLI
-execution and SQLite restart-surviving persistence.
+execution, SQLite restart-surviving persistence, policy enforcement,
+recovery paths for provider/context failures, architectural dependency
+checks, and the async execution engine with fake providers.
 
 ## Architecture
 

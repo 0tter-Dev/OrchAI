@@ -68,7 +68,10 @@ configuration loader for database settings.
 ORCHAI_DATABASE_URL
 ```
 
-When not provided, the default local value is:
+The loader reads `ORCHAI_DATABASE_URL` from the process environment and
+then from a local `.env` file when the process environment does not
+define it. Process environment values take precedence over `.env`
+values. When neither is provided, the default local value is:
 
 ``` text
 sqlite:///.orchai/orchai.db

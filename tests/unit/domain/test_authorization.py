@@ -106,3 +106,38 @@ def test_expired_authorization_cannot_be_reused() -> None:
             at=created_at + timedelta(minutes=6),
         )
 
+
+def test_revoked_authorization_cannot_be_reused() -> None:
+    operation = RequestedOperation(
+        role=RoleName.DEVELOPER,
+        action=ActionName.IMPLEMENT,
+        model_id=ModelId("codex"),
+    )
+    authorization = Authorization.request_authorization(
+        AuthorizationRequest(
+            task_id=TaskId.new(),
+            operation=operation,
+            reason="Implement requested change.",
+            requester="user",
+            execution_mode=ExecutionMode.SUGGESTED,
+        )
+    )
+    authorization.record_decision(
+        AuthorizationDecision(
+            request_id=authorization.id,
+            status=AuthorizationDecisionStatus.GRANTED,
+            decided_by="user",
+            reason="Approved.",
+        )
+    )
+    authorization.record_decision(
+        AuthorizationDecision(
+            request_id=authorization.id,
+            status=AuthorizationDecisionStatus.REVOKED,
+            decided_by="user",
+            reason="Revoked before execution.",
+        )
+    )
+
+    with pytest.raises(AuthorizationNotGrantedError):
+        authorization.ensure_grants(operation=operation)
