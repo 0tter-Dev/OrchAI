@@ -7,10 +7,12 @@ from orchai.bootstrap import (
 )
 from orchai.domain.identifiers import ExecutionId, TaskId
 from orchai.domain.suggestions import SuggestionStatus
+from orchai.infrastructure.persistence import SQLAlchemyProjectRepository
 
 
 def test_local_flow_runs_task_authorization_execution_and_context(tmp_path) -> None:
     async def run() -> None:
+        (tmp_path / ".git").mkdir()
         docs = tmp_path / "docs"
         docs.mkdir()
         (docs / "INDEX.md").write_text("# Project\n\nUseful context.", encoding="utf-8")
@@ -72,5 +74,11 @@ def test_local_flow_runs_task_authorization_execution_and_context(tmp_path) -> N
         assert persisted_suggestions[0].status is SuggestionStatus.ACCEPTED
         assert persisted_context_records[0].reference.resource == "docs/INDEX.md"
         assert persisted_audit_records[0].task_id == task_id
+        assert restarted_runtime.database is not None
+        project = await SQLAlchemyProjectRepository(restarted_runtime.database).get(
+            result["project_id"]
+        )
+        assert project.readiness_level.value == "LEVEL_2_VALIDATABLE"
+        assert project.security_profile.metadata["has_git"] == "True"
 
     asyncio.run(run())

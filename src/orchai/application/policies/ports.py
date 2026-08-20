@@ -7,6 +7,13 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from orchai.domain.actions import ActionName
+from orchai.domain.projects import (
+    ProjectOperation,
+    ProjectReadinessLevel,
+    ProjectSecurityProfile,
+    ProviderSharingLevel,
+    ProviderTarget,
+)
 from orchai.domain.roles import RoleName
 from orchai.domain.tasks import ExecutionMode, TaskState
 
@@ -23,7 +30,17 @@ class PolicyOperation:
     requested_context: tuple[str, ...]
     authorized_context: tuple[str, ...]
     current_task_state: TaskState
+    project_operation: ProjectOperation = ProjectOperation.READ_CONTEXT
+    provider_target: ProviderTarget = ProviderTarget.LOCAL
+    project_readiness_level: ProjectReadinessLevel = (
+        ProjectReadinessLevel.LEVEL_0_CONNECTABLE
+    )
+    project_security_profile: ProjectSecurityProfile = field(
+        default_factory=ProjectSecurityProfile
+    )
+    context_sharing_levels: tuple[ProviderSharingLevel, ...] = ()
     approve_suggestion: bool = False
+    explicit_user_command: bool = False
     previous_role: RoleName | None = None
     previous_action: ActionName | None = None
 

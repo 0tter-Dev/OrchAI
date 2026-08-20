@@ -26,6 +26,9 @@ boundaries without becoming implementation code.
     future messaging strategy.
 -   [`ADAPTER-CONTRACTS.md`](ADAPTER-CONTRACTS.md) --- AI and Project
     Adapter boundaries.
+-   [`PROJECT-SECURITY-AND-READINESS.md`](PROJECT-SECURITY-AND-READINESS.md)
+    --- Security profile, readiness levels, and operational gates for
+    connected projects.
 -   [`API-UI-BOUNDARY.md`](API-UI-BOUNDARY.md) --- API, CLI, and future
     UI boundaries.
 -   [`CONFIGURATION-ARCHITECTURE.md`](CONFIGURATION-ARCHITECTURE.md) ---

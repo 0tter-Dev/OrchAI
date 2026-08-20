@@ -61,6 +61,7 @@ class OrchAIRuntime:
     """Composed application runtime."""
 
     orchestrator: Orchestrator
+    project_service: ProjectService
     event_repository: EventRepository
     audit_repository: AuditRepository
     context_resolution_repository: ContextResolutionRepository
@@ -204,12 +205,14 @@ def _build_runtime(
         policy_service=policy_service,
         project_adapters=project_adapters,
         create_project_adapter=create_project_adapter,
+        event_publisher=event_engine,
         event_history=event_engine,
         audit_repository=audit_repository,
     )
 
     return OrchAIRuntime(
         orchestrator=orchestrator,
+        project_service=project_service,
         event_repository=event_repository,
         audit_repository=audit_repository,
         context_resolution_repository=context_resolution_repository,

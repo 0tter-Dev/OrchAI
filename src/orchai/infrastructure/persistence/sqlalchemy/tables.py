@@ -15,6 +15,10 @@ projects_table = Table(
     Column("adapter_type", Text, nullable=False),
     Column("capabilities", Text, nullable=False),
     Column("status", Text, nullable=False),
+    Column("readiness_level", Text, nullable=False),
+    Column("security_profile", Text, nullable=False),
+    Column("observed_readiness_level", Text, nullable=False),
+    Column("observed_security_profile", Text, nullable=False),
 )
 
 tasks_table = Table(

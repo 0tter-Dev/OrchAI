@@ -19,6 +19,7 @@ from orchai.domain.authorization import AuthorizationDecisionStatus
 from orchai.domain.capabilities import CapabilityName
 from orchai.domain.executions import ExecutionState
 from orchai.domain.identifiers import ModelId
+from orchai.domain.projects import ProjectReadinessLevel, ProjectSecurityProfile
 from orchai.domain.roles import RoleName
 from orchai.domain.tasks import ExecutionMode, TaskState
 from orchai.infrastructure.persistence import (
@@ -64,6 +65,11 @@ def test_sqlite_repositories_survive_application_restart(tmp_path) -> None:
                 name="Persisted",
                 root_location=str(tmp_path),
                 capabilities=(CapabilityName.READ_PROJECT,),
+                readiness_level=ProjectReadinessLevel.LEVEL_1_CHANGEABLE,
+                security_profile=ProjectSecurityProfile(
+                    readiness_level=ProjectReadinessLevel.LEVEL_1_CHANGEABLE,
+                    access_scope=("READ_PROJECT",),
+                ),
             )
         )
         task = await task_service.create_task(
@@ -136,6 +142,9 @@ def test_sqlite_repositories_survive_application_restart(tmp_path) -> None:
         restarted_database = SQLAlchemyDatabase(database_url)
         restarted_database.migrate()
         persisted_task = await SQLAlchemyTaskRepository(restarted_database).get(task.id)
+        persisted_project = await SQLAlchemyProjectRepository(restarted_database).get(
+            project.id
+        )
         persisted_authorization = await SQLAlchemyAuthorizationRepository(
             restarted_database
         ).get(authorization.id)
@@ -144,6 +153,11 @@ def test_sqlite_repositories_survive_application_restart(tmp_path) -> None:
         ).get(execution.id)
 
         assert persisted_task.state is TaskState.PLANNING
+        assert (
+            persisted_project.readiness_level
+            is ProjectReadinessLevel.LEVEL_1_CHANGEABLE
+        )
+        assert persisted_project.security_profile.access_scope == ("READ_PROJECT",)
         assert persisted_authorization.status is AuthorizationDecisionStatus.GRANTED
         assert persisted_execution.state is ExecutionState.COMPLETED
         assert persisted_execution.result is not None

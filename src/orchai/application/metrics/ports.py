@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from orchai.domain.identifiers import TaskId
+from orchai.domain.identifiers import ProjectId, TaskId
 from orchai.domain.metrics import MetricRecord
 
 
@@ -18,6 +18,7 @@ class MetricsRepository(Protocol):
         self,
         *,
         task_id: TaskId | None = None,
+        project_id: ProjectId | None = None,
         limit: int = 20,
     ) -> tuple[MetricRecord, ...]:
         """Return metric records, newest first."""

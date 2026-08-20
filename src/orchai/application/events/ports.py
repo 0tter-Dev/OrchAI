@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from orchai.domain.events import DomainEvent
-from orchai.domain.identifiers import TaskId
+from orchai.domain.identifiers import ProjectId, TaskId
 
 
 class EventPublisher(Protocol):
@@ -32,6 +32,7 @@ class EventRepository(Protocol):
         self,
         *,
         task_id: TaskId | None = None,
+        project_id: ProjectId | None = None,
         limit: int = 20,
     ) -> tuple[DomainEvent, ...]:
         """Return events, newest first."""

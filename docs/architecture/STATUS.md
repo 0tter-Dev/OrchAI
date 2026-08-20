@@ -21,6 +21,8 @@ distinguishes architectural decisions from implementation progress.
   AI Provider Boundary                           `DECIDED`
   Project Adapter Boundary                       `DECIDED`
   Context Ownership Model                        `DECIDED`
+  Project Security / Readiness Boundary          `IMPLEMENTED`
+  Execution Mode Enforcement                     `IMPLEMENTED`
   API/UI Boundary                                `DECIDED`
   Configuration Architecture                     `DEFINED`
   Test Strategy                                  `DEFINED`
@@ -45,6 +47,13 @@ The following have initial implementation validation:
 -   provider-result contract validation and boundary-classified failure
     mapping;
 -   filesystem Project Adapter discovery and authorized context reads;
+-   protected Project Adapter operations for bounded writes,
+    documentation writes, test runs, limited commands, and Git status;
+-   persisted effective-vs-observed project readiness/security with
+    runtime policy enforcement;
+-   execution-mode enforcement where `MANUAL` follows explicit commands
+    without proactive suggestions, `SUGGESTED` requires explicit
+    approval, and `AUTOMATIC` remains bounded by configured policy;
 -   context-resolution metadata persistence without copying project
     content;
 -   durable in-process event dispatch with audit consumption;
@@ -53,22 +62,23 @@ The following have initial implementation validation:
     operational state, event history, audit records, and
     context-resolution metadata;
 -   Typer CLI local orchestration, migration, event, audit, and project
-    discovery commands;
+    discovery/operation commands;
 -   dependency-rule enforcement tests and runtime failure/recovery
     validation;
 -   unit and integration tests for the implemented foundation.
 
 ## Current Phase
 
-**Phase: Executable Foundation In Progress**
+**Phase: Executable Operational Foundation v0.1.1**
 
 The project has a consolidated architectural, domain, technology,
 repository-structure, and decision-record foundation.
 
-The implementation now includes the first executable slices, durable
-history for events and audit records, resolved-context metadata, a
-filesystem Project Adapter boundary, and a replaceable AI provider
-boundary for execution.
+The implementation now includes the first executable operational slices,
+durable history for events and audit records, resolved-context metadata,
+a filesystem Project Adapter boundary with protected operations, runtime
+readiness/security enforcement, and a replaceable AI provider boundary
+for execution.
 
 ## Status Rule
 

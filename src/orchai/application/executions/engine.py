@@ -53,6 +53,7 @@ class ExecutionEngine:
         if execution.state is not ExecutionState.AUTHORIZED:
             raise ValueError("execution must be AUTHORIZED before provider dispatch")
 
+        provider_trace: dict[str, str] = {}
         try:
             execution = await self._execution_service.transition_execution(
                 TransitionExecutionCommand(
@@ -75,26 +76,33 @@ class ExecutionEngine:
                     target_state=ExecutionState.RUNNING,
                 )
             )
-            result = await self._ai_provider.execute(
-                AIProviderExecutionRequest(
-                    execution_id=execution.id,
-                    task_id=execution.task_id,
-                    role=execution.role,
-                    action=execution.action,
-                    model_id=execution.model_id,
-                    project_id=execution.project_id,
-                    context=tuple(
-                        AIProviderContextItem(
-                            resource=item.reference.resource,
-                            content=item.content,
-                            source=item.reference.source.value,
-                            metadata=item.metadata,
-                        )
-                        for item in package.items
-                    ),
-                    metadata={"context_provided_at": package.provided_at.isoformat()},
-                )
+            request = AIProviderExecutionRequest(
+                execution_id=execution.id,
+                task_id=execution.task_id,
+                role=execution.role,
+                action=execution.action,
+                model_id=execution.model_id,
+                project_id=execution.project_id,
+                context=tuple(
+                    AIProviderContextItem(
+                        resource=item.reference.resource,
+                        content=item.content,
+                        source=item.reference.source.value,
+                        metadata=item.metadata,
+                    )
+                    for item in package.items
+                ),
+                metadata={"context_provided_at": package.provided_at.isoformat()},
             )
+            provider_trace = {
+                "shared_context_resources": ",".join(
+                    item.resource for item in request.context
+                ),
+                "shared_context_sources": ",".join(item.source for item in request.context),
+                "provider_context_count": str(len(request.context)),
+            }
+            await self._ai_provider.validate_request(request)
+            result = await self._ai_provider.execute(request)
             result = _validated_provider_result(result, execution=execution)
             if result.success:
                 return await self._execution_service.complete_execution(
@@ -109,7 +117,7 @@ class ExecutionEngine:
                             estimated_cost=result.estimated_cost,
                             metadata=result.metadata,
                         ),
-                        metadata=result.metadata,
+                        metadata={**provider_trace, **dict(result.metadata)},
                     )
                 )
             return await self._fail_execution(
@@ -123,7 +131,7 @@ class ExecutionEngine:
                     estimated_cost=result.estimated_cost,
                     metadata=result.metadata,
                 ),
-                metadata=result.metadata,
+                metadata={**provider_trace, **dict(result.metadata)},
             )
         except AIProviderError as exc:
             return await self._fail_execution(
@@ -131,6 +139,7 @@ class ExecutionEngine:
                 output="",
                 errors=(str(exc),),
                 metadata={
+                    **provider_trace,
                     "error_type": exc.__class__.__name__,
                     "error_boundary": "provider",
                 },
@@ -141,6 +150,7 @@ class ExecutionEngine:
                 output="",
                 errors=(str(exc),),
                 metadata={
+                    **provider_trace,
                     "error_type": exc.__class__.__name__,
                     "error_boundary": "context",
                 },
@@ -151,6 +161,7 @@ class ExecutionEngine:
                 output="",
                 errors=(str(exc),),
                 metadata={
+                    **provider_trace,
                     "error_type": exc.__class__.__name__,
                     "error_boundary": "execution",
                 },
@@ -191,6 +202,7 @@ def _validated_provider_result(
         "provider": provider_name,
         "model_id": str(execution.model_id),
         "execution_id": str(execution.id),
+        "failure_boundary": "provider" if not result.success else "",
         **dict(result.metadata),
     }
     return AIProviderExecutionResult(

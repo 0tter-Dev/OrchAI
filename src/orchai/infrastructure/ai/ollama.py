@@ -26,6 +26,15 @@ class OllamaAIProviderAdapter(AIProviderPort):
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
 
+    async def capabilities(self) -> frozenset[str]:
+        return frozenset({"execute", "validate_request"})
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        if not str(request.model_id).strip():
+            from orchai.application.executions.ports import AIProviderValidationError
+
+            raise AIProviderValidationError("model_id must not be empty")
+
     async def execute(
         self,
         request: AIProviderExecutionRequest,
@@ -58,6 +67,9 @@ class OllamaAIProviderAdapter(AIProviderPort):
                 "done": str(data.get("done")),
             },
         )
+
+    async def cancel(self, execution_id) -> None:
+        raise AIProviderError("ollama adapter does not support cancellation")
 
 
 def _prompt_from(request: AIProviderExecutionRequest) -> str:

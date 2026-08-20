@@ -26,6 +26,17 @@ RESOURCE USAGE
 PROJECT CHANGE
 ```
 
+It should also cover, where applicable:
+
+``` text
+PROJECT READINESS
+PROJECT SECURITY PROFILE
+PERSISTENCE SCOPE CHANGE
+PROVIDER-SHARING DECISION
+GIT INITIALIZATION
+CI/CD ENABLEMENT
+```
+
 ## Record
 
 An audit record should contain, where applicable:
@@ -65,3 +76,5 @@ Metrics derive from authoritative execution and audit information.
 4.  Historical records preserve their meaning.
 5.  Audit failures must not silently erase the operation that should
     have been recorded.
+6.  Readiness-gated and security-sensitive project operations are
+    auditable.

@@ -21,6 +21,13 @@ RESOLVED
 PROVIDED
 ```
 
+Where applicable, the architecture should also distinguish:
+
+``` text
+PERSISTABLE
+PROVIDER-SHAREABLE
+```
+
 ## Sources
 
 ``` text
@@ -52,6 +59,12 @@ AVAILABLE ≠ AUTHORIZED
 
 An execution receives only context authorized for that operation.
 
+Authorized context is not automatically:
+
+- persistable;
+- shareable with a cloud provider;
+- shareable with any provider outside the project trust boundary.
+
 ## Resolution
 
 The Context Manager converts authorized references into concrete
@@ -72,3 +85,5 @@ boundary.
 4.  Context resolution respects task scope.
 5.  Sensitive context cannot cross trust boundaries without
     authorization.
+6.  Authorized context is distinct from persistable context.
+7.  Authorized context is distinct from provider-shareable context.

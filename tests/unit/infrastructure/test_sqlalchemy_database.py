@@ -14,4 +14,11 @@ def test_sqlalchemy_database_applies_migrations_once(tmp_path) -> None:
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).all()
 
-    assert [row[0] for row in versions] == ["0001", "0002", "0003", "0004"]
+    assert [row[0] for row in versions] == [
+        "0001",
+        "0002",
+        "0003",
+        "0004",
+        "0005",
+        "0006",
+    ]

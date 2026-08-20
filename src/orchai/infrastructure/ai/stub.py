@@ -12,6 +12,15 @@ from orchai.application.executions.ports import (
 class StubAIProviderAdapter(AIProviderPort):
     """Provider adapter that returns a deterministic summary."""
 
+    async def capabilities(self) -> frozenset[str]:
+        return frozenset({"execute", "validate_request"})
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        if not request.context:
+            from orchai.application.executions.ports import AIProviderValidationError
+
+            raise AIProviderValidationError("provider requires at least one context item")
+
     async def execute(
         self,
         request: AIProviderExecutionRequest,
@@ -28,3 +37,6 @@ class StubAIProviderAdapter(AIProviderPort):
                 "model_id": str(request.model_id),
             },
         )
+
+    async def cancel(self, execution_id) -> None:
+        return None

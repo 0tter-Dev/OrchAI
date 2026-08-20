@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from orchai.domain.audit import AuditRecord
-from orchai.domain.identifiers import TaskId
+from orchai.domain.identifiers import ProjectId, TaskId
 
 
 class AuditRepository(Protocol):
@@ -18,6 +18,7 @@ class AuditRepository(Protocol):
         self,
         *,
         task_id: TaskId | None = None,
+        project_id: ProjectId | None = None,
         limit: int = 20,
     ) -> tuple[AuditRecord, ...]:
         """Return audit records, newest first."""

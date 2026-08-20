@@ -16,3 +16,14 @@ class ProjectResourceNotFoundError(ProjectAdapterError):
 class ProjectResourceAccessError(ProjectAdapterError):
     """Raised when a project resource is outside the adapter boundary."""
 
+
+class ProjectWriteError(ProjectAdapterError):
+    """Raised when a project write operation fails."""
+
+
+class ProjectCommandExecutionError(ProjectAdapterError):
+    """Raised when a bounded project command cannot be executed."""
+
+
+class ProjectGitError(ProjectAdapterError):
+    """Raised when a Git-bound operation fails."""

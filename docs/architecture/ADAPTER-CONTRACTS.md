@@ -25,12 +25,15 @@ capabilities()
 
 The exact interface may evolve.
 
-The current implementation validates the first concrete application
-port:
+The current implementation validates the first concrete operational
+application port:
 
 ``` text
+AIProviderPort.capabilities()
+AIProviderPort.validate_request(AIProviderExecutionRequest)
 AIProviderPort.execute(AIProviderExecutionRequest)
     -> AIProviderExecutionResult
+AIProviderPort.cancel(execution_id)
 ```
 
 The request contains execution identity, task identity, role, action,
@@ -38,9 +41,9 @@ model, project reference, and only the resolved authorized context
 items. Provider-specific SDK or HTTP types remain in infrastructure
 adapters.
 
-The `prepare`, `validate`, `cancel`, and `capabilities` operations
-remain part of the conceptual adapter surface and may be formalized as
-separate methods when the execution workflow requires them.
+The `prepare` operation remains a conceptual future extension. Request
+validation, cancellation surface, and provider capabilities are already
+formalized in the application port.
 
 ## AI Execution Input
 
@@ -91,20 +94,26 @@ capabilities
 
 Only supported capabilities should be exposed.
 
-The current Project Adapter port validates the first concrete subset:
+The current Project Adapter port validates the first concrete
+operational subset:
 
 ``` text
 capabilities()
 discover(limit)
 read_context(reference)
 resolve_context(references)
+write(reference, content)
+write_documentation(reference, content)
+run_tests(args)
+run_command(command)
+git_status()
 ```
 
 The local filesystem adapter discovers file resources as metadata,
-resolves authorized references under the configured project root, and
-rejects path traversal outside that root. Discovery and persisted
-context-resolution records do not copy complete project files into
-OrchAI storage.
+resolves authorized references under the configured project root, runs
+protected operations behind capabilities, and rejects path traversal
+outside that root. Discovery and persisted context-resolution records do
+not copy complete project files into OrchAI storage.
 
 ## Capability Negotiation
 

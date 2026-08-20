@@ -7,6 +7,7 @@ from orchai.bootstrap import build_in_memory_runtime
 
 def test_context_resolution_failure_keeps_task_traceable(tmp_path) -> None:
     async def run() -> None:
+        (tmp_path / ".git").mkdir()
         runtime = build_in_memory_runtime(ai_provider=UnexpectedProvider())
         result = await runtime.orchestrator.run_local_flow(
             RunLocalFlowCommand(
@@ -28,8 +29,17 @@ def test_context_resolution_failure_keeps_task_traceable(tmp_path) -> None:
 
 
 class UnexpectedProvider(AIProviderPort):
+    async def capabilities(self) -> frozenset[str]:
+        return frozenset({"execute", "validate_request"})
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        return None
+
     async def execute(
         self,
         request: AIProviderExecutionRequest,
     ) -> AIProviderExecutionResult:
         raise AssertionError("provider should not run when context resolution fails")
+
+    async def cancel(self, execution_id) -> None:
+        return None

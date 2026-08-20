@@ -5,6 +5,7 @@ from orchai.application.executions.ports import (
     AIProviderExecutionRequest,
     AIProviderExecutionResult,
     AIProviderPort,
+    AIProviderValidationError,
 )
 from orchai.application.orchestration import RunLocalFlowCommand
 from orchai.application.orchestration.orchestrator import AutomaticExecutionPolicy
@@ -15,6 +16,7 @@ from orchai.domain.tasks import ExecutionMode
 
 def test_execution_engine_invokes_provider_after_authorization(tmp_path) -> None:
     async def run() -> None:
+        (tmp_path / ".git").mkdir()
         docs = tmp_path / "docs"
         docs.mkdir()
         (docs / "INDEX.md").write_text("# Context", encoding="utf-8")
@@ -55,6 +57,7 @@ def test_execution_engine_invokes_provider_after_authorization(tmp_path) -> None
 
 def test_execution_engine_maps_provider_error_to_failed_execution(tmp_path) -> None:
     async def run() -> None:
+        (tmp_path / ".git").mkdir()
         docs = tmp_path / "docs"
         docs.mkdir()
         (docs / "INDEX.md").write_text("# Context", encoding="utf-8")
@@ -114,6 +117,7 @@ def test_orchestrator_suggested_mode_requires_approval(tmp_path) -> None:
 
 def test_orchestrator_automatic_mode_uses_configured_limits(tmp_path) -> None:
     async def run() -> None:
+        (tmp_path / ".git").mkdir()
         docs = tmp_path / "docs"
         docs.mkdir()
         (docs / "INDEX.md").write_text("# Context", encoding="utf-8")
@@ -168,9 +172,73 @@ def test_orchestrator_automatic_mode_blocks_disallowed_operation(tmp_path) -> No
     asyncio.run(run())
 
 
+def test_orchestrator_blocks_source_changes_when_project_has_no_git(tmp_path) -> None:
+    async def run() -> None:
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "INDEX.md").write_text("# Context", encoding="utf-8")
+        provider = RecordingProvider()
+        runtime = build_in_memory_runtime(ai_provider=provider)
+
+        result = await runtime.orchestrator.run_local_flow(
+            RunLocalFlowCommand(
+                project_root=tmp_path,
+                context_path="docs/INDEX.md",
+                title="Readiness denied",
+                model="fake-model",
+                storage_label="memory",
+                approve_suggestion=True,
+            )
+        )
+
+        assert result.task_state == "PLANNED"
+        assert result.execution_state == ""
+        assert result.suggestion_status == "PRESENTED"
+        assert result.blocked_reason == "source_write_requires_level_1"
+        assert provider.request is None
+
+    asyncio.run(run())
+
+
+def test_execution_engine_maps_provider_validation_error_to_failed_execution(tmp_path) -> None:
+    async def run() -> None:
+        (tmp_path / ".git").mkdir()
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "INDEX.md").write_text("# Context", encoding="utf-8")
+        runtime = build_in_memory_runtime(ai_provider=ValidationRejectingProvider())
+
+        result = await runtime.orchestrator.run_local_flow(
+            RunLocalFlowCommand(
+                project_root=tmp_path,
+                context_path="docs/INDEX.md",
+                title="Engine validation failure",
+                model="fake-model",
+                storage_label="memory",
+                approve_suggestion=True,
+            )
+        )
+
+        assert result.task_state == "IMPLEMENTING"
+        assert result.execution_state == "FAILED"
+        metrics = await runtime.metrics_repository.list(
+            task_id=TaskId(result.task_id),
+            limit=100,
+        )
+        assert {metric.name for metric in metrics} >= {"execution.failure"}
+
+    asyncio.run(run())
+
+
 class RecordingProvider(AIProviderPort):
     def __init__(self) -> None:
         self.request: AIProviderExecutionRequest | None = None
+
+    async def capabilities(self) -> frozenset[str]:
+        return frozenset({"execute", "validate_request"})
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        return None
 
     async def execute(
         self,
@@ -185,10 +253,39 @@ class RecordingProvider(AIProviderPort):
             metadata={"provider": "fake"},
         )
 
+    async def cancel(self, execution_id) -> None:
+        return None
+
 
 class FailingProvider(AIProviderPort):
+    async def capabilities(self) -> frozenset[str]:
+        return frozenset({"execute", "validate_request"})
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        return None
+
     async def execute(
         self,
         request: AIProviderExecutionRequest,
     ) -> AIProviderExecutionResult:
         raise AIProviderError("provider unavailable")
+
+    async def cancel(self, execution_id) -> None:
+        return None
+
+
+class ValidationRejectingProvider(AIProviderPort):
+    async def capabilities(self) -> frozenset[str]:
+        return frozenset({"execute", "validate_request"})
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        raise AIProviderValidationError("provider validation failed")
+
+    async def execute(
+        self,
+        request: AIProviderExecutionRequest,
+    ) -> AIProviderExecutionResult:
+        raise AssertionError("provider should not execute after validation failure")
+
+    async def cancel(self, execution_id) -> None:
+        return None

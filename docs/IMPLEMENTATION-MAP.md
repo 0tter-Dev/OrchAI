@@ -803,3 +803,42 @@ contracts, navigation documents, and this map agree on:
 
 Concrete implementation work may begin after repository-level bootstrap
 files and the first domain slice are defined.
+
+## 27. Project Security and Readiness Layer
+
+The implementation should include an explicit layer that evaluates:
+
+-   whether a project is merely connectable;
+-   whether the project is ready for tracked modification;
+-   whether the project is ready for meaningful validation flows;
+-   whether the project is ready for CI/CD or broader automation;
+-   what project knowledge may be persisted;
+-   what project knowledge may cross provider boundaries.
+
+This layer should support readiness rules equivalent to:
+
+``` text
+Connect project
+    -> LEVEL_0
+
+Change code
+    -> LEVEL_1
+
+Run or structure test/validation flow
+    -> LEVEL_2
+
+Create or change CI/CD
+    -> LEVEL_3
+```
+
+It should also support project security profiles that distinguish:
+
+``` text
+DISCOVERABLE
+READABLE
+PERSISTABLE
+PROVIDER-SHAREABLE
+```
+
+This keeps OrchAI broadly connectable while making high-impact
+operations explicit, auditable, and safely constrained.

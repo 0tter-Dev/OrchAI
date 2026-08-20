@@ -56,9 +56,11 @@ state. A `PLANNED` task suggests `DEVELOPER` + `IMPLEMENT`, and an
 `IMPLEMENTED` task suggests `QUALITY_AGENT` + `REVIEW`.
 
 The Orchestrator enforces execution mode before requesting
-authorization: `SUGGESTED` presents the suggestion until explicit
-approval, while `AUTOMATIC` proceeds only when the configured automatic
-policy allows the suggested role/action pair.
+authorization: `MANUAL` treats the user-provided operation as the direct
+command and does not generate a proactive suggestion, `SUGGESTED`
+presents the suggestion until explicit approval, and `AUTOMATIC`
+proceeds only when the configured automatic policy allows the suggested
+role/action pair.
 
 ## Execution Modes
 

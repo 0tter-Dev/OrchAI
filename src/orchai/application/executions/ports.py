@@ -77,11 +77,24 @@ class AIProviderContractError(AIProviderError):
     """Raised when an adapter returns an invalid provider result."""
 
 
+class AIProviderValidationError(AIProviderError):
+    """Raised when a provider rejects a request before execution."""
+
+
 class AIProviderPort(Protocol):
     """Provider-independent AI execution adapter contract."""
+
+    async def capabilities(self) -> frozenset[str]:
+        """Return provider-declared capabilities."""
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        """Validate a bounded request before execution."""
 
     async def execute(
         self,
         request: AIProviderExecutionRequest,
     ) -> AIProviderExecutionResult:
         """Execute a bounded request using the selected AI provider."""
+
+    async def cancel(self, execution_id: ExecutionId) -> None:
+        """Cancel one execution when supported by the provider."""

@@ -135,6 +135,44 @@ runtime. Metrics are derived from authoritative execution records and
 events; suggestions remain non-authoritative and record their lifecycle
 status separately from authorization decisions.
 
+## Project Knowledge Persistence Policy
+
+Persistence of project knowledge must remain narrower than project
+readability.
+
+Representative categories:
+
+### Allowed by Default
+
+- project identity;
+- adapter metadata;
+- resource references;
+- capabilities;
+- readiness metadata;
+- context-resolution metadata;
+- execution and audit history.
+
+### Allowed Only with Explicit Authorization
+
+- persisted architecture summaries;
+- persisted naming-convention summaries;
+- persisted functional summaries;
+- persisted workflow summaries;
+- explicit reproducible context snapshots.
+
+### Not Persisted by Default
+
+- complete project code;
+- complete project documentation;
+- full repository mirrors;
+- secrets;
+- credentials;
+- personal data;
+- sensitive proprietary artifacts.
+
+Project readability must not be interpreted as permission to persist
+project knowledge indefinitely.
+
 ## Repository Boundary
 
 ``` text

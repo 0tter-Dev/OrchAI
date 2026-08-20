@@ -244,6 +244,31 @@ Broad authorization should only be used when explicitly intended.
 
 ------------------------------------------------------------------------
 
+## 11.1 Operational Gate Authorization
+
+Authorization is necessary for protected operations, but authorization
+alone may not be sufficient.
+
+A protected project operation may require:
+
+-   sufficient project readiness;
+-   applicable policy approval;
+-   explicit authorization;
+-   allowed persistence/provider-sharing behavior when relevant.
+
+Example:
+
+``` text
+User authorizes code change
+    ≠
+Project is ready for code change
+```
+
+If the minimum readiness level is not satisfied, OrchAI must block the
+operation even when the user would otherwise authorize it.
+
+------------------------------------------------------------------------
+
 ## 12. Authorization Expiration
 
 Authorization may expire when:
@@ -371,3 +396,4 @@ mechanism.
 10. Context authorization must be independently traceable.
 11. Authorization decisions must be auditable.
 12. Expired or revoked authorization must not be reused.
+13. Authorization does not bypass minimum project readiness rules.

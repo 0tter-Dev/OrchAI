@@ -18,6 +18,9 @@ class InMemoryProjectRepository(ProjectRepository):
         self._projects: dict[ProjectId, Project] = {}
 
     async def add(self, project: Project) -> None:
+        await self.save(project)
+
+    async def save(self, project: Project) -> None:
         self._projects[project.id] = project
 
     async def get(self, project_id: ProjectId) -> Project:
@@ -26,6 +29,12 @@ class InMemoryProjectRepository(ProjectRepository):
         except KeyError as exc:
             raise ProjectNotFoundError(str(project_id)) from exc
 
+    async def get_by_root_location(self, root_location: str) -> Project | None:
+        normalized = root_location.strip()
+        for project in self._projects.values():
+            if project.root_location == normalized:
+                return project
+        return None
+
     async def list(self) -> tuple[Project, ...]:
         return tuple(self._projects.values())
-

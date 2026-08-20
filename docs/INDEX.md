@@ -27,6 +27,8 @@ provide a stable entry point for humans and AI agents.
     documentation navigation.
 -   [`architecture/STATUS.md`](architecture/STATUS.md) --- Current
     architecture-definition status.
+-   [`architecture/PROJECT-SECURITY-AND-READINESS.md`](architecture/PROJECT-SECURITY-AND-READINESS.md)
+    --- Security, trust, and readiness rules for connected projects.
 
 ### Domains
 

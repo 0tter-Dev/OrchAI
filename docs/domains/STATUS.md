@@ -34,31 +34,34 @@ Domain Contracts
     -> DEFINED
 
 Domain Code
-    -> PARTIAL
+    -> IN_PROGRESS
 
 Domain Unit Tests
-    -> PARTIAL
+    -> IN_PROGRESS
 
 Domain Integration
-    -> PARTIAL
+    -> IN_PROGRESS
 ```
 
 Implemented domain slices currently include task state transitions,
 authorization requests and decisions, execution lifecycle,
 role/action/model/capability vocabularies, context references/packages,
 context-resolution metadata, external project metadata, filesystem
-Project Adapter discovery, domain events, initial audit records,
-event-derived execution metrics, task-state suggestions, initial
-execution-mode enforcement, an initial policy slice at the application
-boundary, and the first provider-independent execution adapter
+Project Adapter discovery and protected operations, domain events,
+initial audit records, event-derived execution metrics, task-state
+suggestions, execution-mode enforcement, an initial policy slice at the
+application boundary, and the provider-independent execution adapter
 boundary.
 
 Metrics and suggestions are implemented only for the first operational
-slice. Policy is now implemented only for the initial local flow and is
-not yet a fully configurable engine. Audit is implemented only for the
-initial event-derived history path. Project integration is limited to
-the initial filesystem adapter, and provider integration is limited to
-the initial execution port plus stub/Ollama adapters.
+slice. Policy is runtime-enforced for the local flow and protected
+project operations, but is not yet a fully configurable engine. Audit is
+implemented for the initial event-derived history path. Project
+integration is limited to the filesystem adapter, and provider
+integration is limited to the initial execution port plus stub/Ollama
+adapters. Project security profiles and readiness gates are now
+implemented as a runtime-enforced domain/application slice with
+persisted effective and observed project state.
 
 ## Open Conceptual Areas
 

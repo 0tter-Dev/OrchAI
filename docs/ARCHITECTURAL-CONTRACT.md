@@ -400,6 +400,65 @@ Potential future extensions include:
 
 ------------------------------------------------------------------------
 
+### 2.20 Project Connectivity Without Operational Assumptions
+
+OrchAI may connect to any external project shape, including:
+
+-   an empty directory;
+-   a project without Git;
+-   a project without documentation;
+-   a project without tests;
+-   a legacy project with low traceability.
+
+Connection does not imply that every operation is immediately valid.
+
+Higher-impact operations may require explicit project readiness
+conditions before OrchAI is allowed to perform them.
+
+------------------------------------------------------------------------
+
+### 2.21 Readiness-Gated Operations
+
+Project operations must respect minimum readiness requirements.
+
+At minimum, the architecture must support rules equivalent to:
+
+-   code modification requires a tracked/reversible project state;
+-   meaningful test and validation workflows require minimum documented
+    project context;
+-   CI/CD and delivery automation require higher project readiness than
+    simple connection or reading.
+
+The absence of readiness must block the protected operation, not the
+project connection itself.
+
+------------------------------------------------------------------------
+
+### 2.22 Explicit Project Security and Persistence Boundaries
+
+The architecture must explicitly distinguish:
+
+-   what project information is discoverable;
+-   what project information is readable;
+-   what project information is persistable;
+-   what project information is shareable with local AI;
+-   what project information is shareable with cloud AI.
+
+Project readability does not imply persistability.
+
+Project readability does not imply provider-shareability.
+
+------------------------------------------------------------------------
+
+### 2.23 Sensitive Context and Provider Boundaries
+
+Sensitive, personal, regulated, or proprietary project information must
+not cross an external provider boundary merely because it is available
+inside the connected project.
+
+Such information requires explicit governance through project security
+rules in addition to task-level authorization where applicable.
+
 ## 3. Architectural Non-Goals
 
 The OrchAI is not intended to:

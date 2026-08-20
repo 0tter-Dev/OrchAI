@@ -27,6 +27,9 @@ ADRs explain why important architectural choices were made.
     --- Async-first in-process execution baseline.
 -   [`ADR-009-PROJECT-CONTENT-OWNERSHIP.md`](ADR-009-PROJECT-CONTENT-OWNERSHIP.md)
     --- External ownership of connected project content.
+-   [`ADR-010-PROJECT-READINESS-AND-SECURITY-GATES.md`](ADR-010-PROJECT-READINESS-AND-SECURITY-GATES.md)
+    --- Readiness and security gates for operations on connected
+    projects.
 
 ## ADR Status Model
 

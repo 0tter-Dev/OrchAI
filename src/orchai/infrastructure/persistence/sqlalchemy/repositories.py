@@ -52,7 +52,12 @@ from orchai.domain.identifiers import (
     TaskId,
 )
 from orchai.domain.metrics import MetricRecord
-from orchai.domain.projects import Project, ProjectStatus
+from orchai.domain.projects import (
+    Project,
+    ProjectReadinessLevel,
+    ProjectSecurityProfile,
+    ProjectStatus,
+)
 from orchai.domain.roles import RoleName
 from orchai.domain.suggestions import Suggestion, SuggestionStatus
 from orchai.domain.tasks import ExecutionMode, Task, TaskScope, TaskState
@@ -112,6 +117,9 @@ class SQLAlchemyProjectRepository(ProjectRepository):
         self._database = database
 
     async def add(self, project: Project) -> None:
+        await self.save(project)
+
+    async def save(self, project: Project) -> None:
         values = _project_to_values(project)
         with self._database.engine.begin() as connection:
             exists = connection.execute(
@@ -134,6 +142,23 @@ class SQLAlchemyProjectRepository(ProjectRepository):
         if row is None:
             raise LookupError(str(project_id))
         return _project_from_row(row._mapping)
+
+    async def get_by_root_location(self, root_location: str) -> Project | None:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(projects_table).where(
+                    projects_table.c.root_location == root_location.strip()
+                )
+            ).first()
+        if row is None:
+            return None
+        return _project_from_row(row._mapping)
+
+    async def list(self) -> tuple[Project, ...]:
+        query = select(projects_table).order_by(projects_table.c.name.asc())
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_project_from_row(row._mapping) for row in rows)
 
 
 class SQLAlchemyAuthorizationRepository(AuthorizationRepository):
@@ -252,6 +277,7 @@ class SQLAlchemyEventRepository(EventRepository):
         self,
         *,
         task_id: TaskId | None = None,
+        project_id: ProjectId | None = None,
         limit: int = 20,
     ) -> tuple[DomainEvent, ...]:
         query = select(events_table).order_by(
@@ -260,6 +286,8 @@ class SQLAlchemyEventRepository(EventRepository):
         )
         if task_id is not None:
             query = query.where(events_table.c.task_id == str(task_id))
+        if project_id is not None:
+            query = query.where(events_table.c.project_id == str(project_id))
         query = query.limit(_normalize_limit(limit))
         with self._database.engine.begin() as connection:
             rows = connection.execute(query).all()
@@ -296,6 +324,7 @@ class SQLAlchemyAuditRepository(AuditRepository):
         self,
         *,
         task_id: TaskId | None = None,
+        project_id: ProjectId | None = None,
         limit: int = 20,
     ) -> tuple[AuditRecord, ...]:
         query = select(audit_records_table).order_by(
@@ -304,6 +333,8 @@ class SQLAlchemyAuditRepository(AuditRepository):
         )
         if task_id is not None:
             query = query.where(audit_records_table.c.task_id == str(task_id))
+        if project_id is not None:
+            query = query.where(audit_records_table.c.project_id == str(project_id))
         query = query.limit(_normalize_limit(limit))
         with self._database.engine.begin() as connection:
             rows = connection.execute(query).all()
@@ -366,6 +397,7 @@ class SQLAlchemyMetricsRepository(MetricsRepository):
         self,
         *,
         task_id: TaskId | None = None,
+        project_id: ProjectId | None = None,
         limit: int = 20,
     ) -> tuple[MetricRecord, ...]:
         query = select(metric_records_table).order_by(
@@ -374,6 +406,8 @@ class SQLAlchemyMetricsRepository(MetricsRepository):
         )
         if task_id is not None:
             query = query.where(metric_records_table.c.task_id == str(task_id))
+        if project_id is not None:
+            query = query.where(metric_records_table.c.project_id == str(project_id))
         query = query.limit(_normalize_limit(limit))
         with self._database.engine.begin() as connection:
             rows = connection.execute(query).all()
@@ -449,6 +483,12 @@ def _project_to_values(project: Project) -> dict[str, Any]:
             [capability.value for capability in project.capabilities]
         ),
         "status": project.status.value,
+        "readiness_level": project.readiness_level.value,
+        "security_profile": _to_json(project.security_profile.as_dict()),
+        "observed_readiness_level": project.observed_readiness_level.value,
+        "observed_security_profile": _to_json(
+            project.observed_security_profile.as_dict()
+        ),
     }
 
 
@@ -653,6 +693,24 @@ def _project_from_row(row: Mapping[str, Any]) -> Project:
             CapabilityName(value) for value in _from_json(row["capabilities"])
         ),
         status=ProjectStatus(row["status"]),
+        readiness_level=ProjectReadinessLevel(
+            row.get("readiness_level") or ProjectReadinessLevel.LEVEL_0_CONNECTABLE
+        ),
+        security_profile=ProjectSecurityProfile.from_dict(
+            _from_json(row.get("security_profile") or "{}")
+        ),
+        observed_readiness_level=ProjectReadinessLevel(
+            row.get("observed_readiness_level")
+            or row.get("readiness_level")
+            or ProjectReadinessLevel.LEVEL_0_CONNECTABLE
+        ),
+        observed_security_profile=ProjectSecurityProfile.from_dict(
+            _from_json(
+                row.get("observed_security_profile")
+                or row.get("security_profile")
+                or "{}"
+            )
+        ),
     )
 
 
