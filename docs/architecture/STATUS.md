@@ -23,10 +23,12 @@ distinguishes architectural decisions from implementation progress.
   Context Ownership Model                        `DECIDED`
   Project Security / Readiness Boundary          `IMPLEMENTED`
   Execution Mode Enforcement                     `IMPLEMENTED`
-  API/UI Boundary                                `DECIDED`
+  API/UI Boundary                                `IMPLEMENTED`
   Configuration Architecture                     `DEFINED`
   Test Strategy                                  `DEFINED`
   Deployment Model                               `DEFINED`
+  Chat-First Request Interface                   `DECIDED`
+  Identity and Access Management                 `IMPLEMENTED`
 
 ## Implementation Validation
 
@@ -63,13 +65,25 @@ The following have initial implementation validation:
     context-resolution metadata;
 -   Typer CLI local orchestration, migration, event, audit, and project
     discovery/operation commands;
+-   FastAPI endpoints covering the current foundation for health, local
+    flow, protected project operations, runtime/provider inspection,
+    persisted project inspection, filtered task/execution queries, and
+    observability queries;
 -   dependency-rule enforcement tests and runtime failure/recovery
     validation;
 -   unit and integration tests for the implemented foundation.
 
 ## Current Phase
 
-**Phase: Executable Operational Foundation v0.1.1**
+**Phase: Chat-First Request Interface v0.1.11**
+
+Identity and Access Management (ADR-012) is now fully implemented across
+four phases — identity data model, token lifecycle, enforcement wiring,
+and an admin/self-service CRUD layer for users, access roles, and
+projects — see `docs/STATUS.md` and
+`docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` for the detailed,
+currently-maintained account; not restated here to avoid a second,
+driftable copy of the same facts.
 
 The project has a consolidated architectural, domain, technology,
 repository-structure, and decision-record foundation.
@@ -79,6 +93,15 @@ durable history for events and audit records, resolved-context metadata,
 a filesystem Project Adapter boundary with protected operations, runtime
 readiness/security enforcement, and a replaceable AI provider boundary
 for execution.
+
+Since the "Executable Operational Foundation" phase this document
+originally tracked, the architectural baseline was extended twice: a
+Chat-First Request Interface (ADR-011) was decided and layered on top
+of the Task domain as the primary external API surface, and an Identity
+and Access Model (ADR-012) was designed as a companion decision — see
+`docs/architecture/IDENTITY-AND-ACCESS-MODEL.md`. Both are architectural
+decisions only; implementation status for the overall project is tracked
+in the root `docs/STATUS.md`, not here.
 
 ## Status Rule
 

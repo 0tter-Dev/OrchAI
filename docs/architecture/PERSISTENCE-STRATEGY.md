@@ -20,9 +20,14 @@ repository contracts.
 ## Current Implementation
 
 The current implementation includes an initial SQLAlchemy persistence
-layer with SQL migrations for local durable operation. SQLite is the
-default local database, and the repository implementations use the same
-application contracts intended for PostgreSQL.
+layer with SQL migrations for durable operation. PostgreSQL is the
+explicit production default: `ORCHAI_DATABASE_URL` resolves to a local
+PostgreSQL connection string when left unset. SQLite remains fully
+supported as a secondary option, meant only to keep local development and
+automated tests fast and dependency-free; it is opted into explicitly, by
+setting a `sqlite:///...` URL or the shorter `sqlite`/`local` alias. Both
+dialects share the same repository implementations and application
+contracts, and the same SQL migrations apply to either.
 
 The current persisted aggregates are:
 
@@ -47,12 +52,13 @@ primary database. The current migrations are validated against SQLite
 and the configured local PostgreSQL database without changing domain
 models or application use cases.
 
-The CLI includes a local PostgreSQL setup helper for environments where
+The CLI includes a local database setup helper for environments where
 the PostgreSQL server is already running but the target database has not
-yet been created:
+yet been created — it creates the database when applicable (a no-op for
+a local-flow/SQLite target) and then applies migrations, in one step:
 
 ``` text
-orchai db create
+orchai db sync
 ```
 
 ## What OrchAI Persists

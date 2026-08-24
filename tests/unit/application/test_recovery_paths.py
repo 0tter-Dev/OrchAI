@@ -20,7 +20,10 @@ def test_context_resolution_failure_keeps_task_traceable(tmp_path) -> None:
             )
         )
 
-        assert result.task_state == "IMPLEMENTING"
+        # A failed execution during the (now gated) PLAN stage transitions the
+        # task to BLOCKED via run_task_workflow_stage's failure handling,
+        # rather than leaving it stuck mid-transition.
+        assert result.task_state == "BLOCKED"
         assert result.execution_state == "FAILED"
         audit_records = await runtime.audit_repository.list(limit=100)
         assert any(record.operation == "EXECUTION_FAILED" for record in audit_records)

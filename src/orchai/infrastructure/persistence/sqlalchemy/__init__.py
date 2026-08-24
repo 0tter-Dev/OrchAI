@@ -2,18 +2,26 @@
 
 from orchai.infrastructure.persistence.sqlalchemy.database import SQLAlchemyDatabase
 from orchai.infrastructure.persistence.sqlalchemy.repositories import (
+    SQLAlchemyAccessControlRepository,
+    SQLAlchemyAccessRoleRepository,
     SQLAlchemyAuditRepository,
     SQLAlchemyAuthorizationRepository,
     SQLAlchemyContextResolutionRepository,
     SQLAlchemyEventRepository,
     SQLAlchemyExecutionRepository,
     SQLAlchemyMetricsRepository,
+    SQLAlchemyPermissionRepository,
+    SQLAlchemyProjectConnectionRepository,
     SQLAlchemyProjectRepository,
+    SQLAlchemyRefreshTokenRepository,
     SQLAlchemySuggestionRepository,
     SQLAlchemyTaskRepository,
+    SQLAlchemyUserRepository,
 )
 
 __all__ = [
+    "SQLAlchemyAccessControlRepository",
+    "SQLAlchemyAccessRoleRepository",
     "SQLAlchemyAuditRepository",
     "SQLAlchemyAuthorizationRepository",
     "SQLAlchemyContextResolutionRepository",
@@ -21,7 +29,11 @@ __all__ = [
     "SQLAlchemyEventRepository",
     "SQLAlchemyExecutionRepository",
     "SQLAlchemyMetricsRepository",
+    "SQLAlchemyPermissionRepository",
+    "SQLAlchemyProjectConnectionRepository",
     "SQLAlchemyProjectRepository",
+    "SQLAlchemyRefreshTokenRepository",
     "SQLAlchemySuggestionRepository",
     "SQLAlchemyTaskRepository",
+    "SQLAlchemyUserRepository",
 ]

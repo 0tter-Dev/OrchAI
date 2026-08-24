@@ -168,3 +168,87 @@ suggestions_table = Table(
     Column("generated_at", Text, nullable=False),
     Column("metadata", Text, nullable=False),
 )
+
+# --- Identity and access management (ADR-012) ---------------------------
+# Isolated Phase 1 slice: these tables are persisted and unit-tested but not
+# yet consulted by any route/command. See docs/TO-DO.md Priority 1.
+
+users_table = Table(
+    "users",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("username", Text, nullable=False, unique=True),
+    Column("email", Text),
+    Column("password_hash", Text, nullable=False),
+    Column("is_superuser", Integer, nullable=False),
+    Column("is_active", Integer, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
+access_roles_table = Table(
+    "access_roles",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("name", Text, nullable=False, unique=True),
+    Column("description", Text, nullable=False),
+)
+
+permissions_table = Table(
+    "permissions",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("key", Text, nullable=False, unique=True),
+    Column("description", Text, nullable=False),
+)
+
+role_permissions_table = Table(
+    "role_permissions",
+    metadata,
+    Column("role_id", Text, ForeignKey("access_roles.id"), primary_key=True),
+    Column("permission_id", Text, ForeignKey("permissions.id"), primary_key=True),
+)
+
+user_roles_table = Table(
+    "user_roles",
+    metadata,
+    Column("user_id", Text, ForeignKey("users.id"), primary_key=True),
+    Column("role_id", Text, ForeignKey("access_roles.id"), primary_key=True),
+)
+
+user_permissions_table = Table(
+    "user_permissions",
+    metadata,
+    Column("user_id", Text, ForeignKey("users.id"), primary_key=True),
+    Column("permission_id", Text, ForeignKey("permissions.id"), primary_key=True),
+)
+
+refresh_tokens_table = Table(
+    "refresh_tokens",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
+    Column("token_hash", Text, nullable=False, unique=True),
+    Column("issued_at", Text, nullable=False),
+    Column("expires_at", Text, nullable=False),
+    Column("revoked_at", Text),
+)
+
+# --- Project<->User connection reference (docs/TO-DO.md Priority 1) -----
+# A lightweight, informational record of which user connected which
+# project -- NOT an access-control boundary (nothing enforces anything
+# based on it yet; that is the deliberately deferred broader refactor).
+# Lives alongside `projects_table` (same database as the request's
+# resolved `database_url`), not in the identity migration/database,
+# because it is per-project metadata like `tasks`/`executions`/etc, not
+# an identity concern -- unlike identity, which always resolves through
+# the primary configured database. No FK on `user_id`: the project's
+# database and the primary identity database are not guaranteed to be
+# the same database when `database_url` is overridden per-request.
+project_connections_table = Table(
+    "project_connections",
+    metadata,
+    Column("project_id", Text, ForeignKey("projects.id"), primary_key=True),
+    Column("user_id", Text, primary_key=True),
+    Column("connected_at", Text, nullable=False),
+)

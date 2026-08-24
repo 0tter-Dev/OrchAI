@@ -8,6 +8,8 @@ from pathlib import Path
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
+from orchai.infrastructure.configuration.settings import DatabaseSettings
+
 
 class SQLAlchemyDatabase:
     """Database boundary shared by SQLite and PostgreSQL SQLAlchemy repositories."""
@@ -44,11 +46,20 @@ class SQLAlchemyDatabase:
                     {"version": version},
                 )
 
+    def ping(self) -> None:
+        """Validate connectivity against the configured database."""
+
+        with self.engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+
 
 def _normalize_url(url: str) -> str:
-    if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+psycopg://", 1)
-    return url
+    stripped = url.strip()
+    if stripped.lower() in DatabaseSettings.LOCAL_TEST_ALIASES:
+        stripped = DatabaseSettings.LOCAL_TEST_URL
+    if stripped.startswith("postgresql://"):
+        return stripped.replace("postgresql://", "postgresql+psycopg://", 1)
+    return stripped
 
 
 def _ensure_sqlite_parent(url: str) -> None:
@@ -59,7 +70,7 @@ def _ensure_sqlite_parent(url: str) -> None:
 
 
 def _migration_files() -> tuple[resources.abc.Traversable, ...]:
-    migration_root = resources.files("orchai.infrastructure.persistence.sqlite")
+    migration_root = resources.files("orchai.infrastructure.persistence.db")
     migration_root = migration_root.joinpath("migrations")
     return tuple(
         sorted(

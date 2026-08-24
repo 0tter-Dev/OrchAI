@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from orchai.application.events.ports import EventPublisher
+from orchai.domain.identifiers import ProjectId, TaskId
 from orchai.application.tasks.commands import CreateTaskCommand, TransitionTaskCommand
 from orchai.application.tasks.ports import TaskRepository
 from orchai.domain.events import DomainEvent, EventType
@@ -67,6 +68,22 @@ class TaskService:
             )
         )
         return task
+
+    async def get_task(self, task_id: TaskId) -> Task:
+        return await self._repository.get(task_id)
+
+    async def list_tasks(
+        self,
+        *,
+        project_id: ProjectId | None = None,
+        state: TaskState | None = None,
+        limit: int = 20,
+    ) -> tuple[Task, ...]:
+        return await self._repository.list(
+            project_id=project_id,
+            state=state,
+            limit=limit,
+        )
 
 
 def _state_transition_event(

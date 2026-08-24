@@ -94,7 +94,7 @@ Responsibilities:
 
 It must not contain project-specific business logic.
 
-### 4.2 Task Manager
+### 4.2 Task Engine
 
 Responsible for task lifecycle management:
 
@@ -124,7 +124,7 @@ Allowed / Rejected
 
 It must remain deterministic and independently testable.
 
-### 4.4 Execution Manager
+### 4.4 Execution Engine
 
 Transforms an authorized task operation into an execution.
 
@@ -153,7 +153,7 @@ Responsible for authorization boundaries:
 
 Recommendations must never silently become approvals.
 
-### 4.6 Event Manager
+### 4.6 Event Engine
 
 Responsible for domain event handling:
 
@@ -179,7 +179,7 @@ NOTIFICATION
 Provides a stable interface between `OrchAI` and AI resources.
 
 ``` text
-Execution Manager
+Execution Engine
        ↓
 AI Provider Interface
        ↓
@@ -318,7 +318,7 @@ A project must not depend on OrchAI's internal implementation.
 AI providers should follow:
 
 ``` text
-Execution Manager
+Execution Engine
        ↓
 AI Provider Interface
        ↓
@@ -737,8 +737,10 @@ pytest
 Docker
 ```
 
-PostgreSQL is the primary persistence target. SQLite remains supported
-for lightweight/local operation.
+PostgreSQL is the primary persistence target and the explicit default
+when no database URL is configured. SQLite remains supported, strictly as
+a secondary option for lightweight local development and automated
+tests, opted into explicitly.
 
 The first runtime uses `asyncio` tasks for long-running execution and
 does not require RabbitMQ, Redis, Celery, Kafka, or another distributed

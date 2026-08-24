@@ -5,6 +5,7 @@ from __future__ import annotations
 from orchai.application.executions.ports import (
     AIProviderExecutionRequest,
     AIProviderExecutionResult,
+    AIProviderHealthCheck,
     AIProviderPort,
 )
 
@@ -20,6 +21,14 @@ class StubAIProviderAdapter(AIProviderPort):
             from orchai.application.executions.ports import AIProviderValidationError
 
             raise AIProviderValidationError("provider requires at least one context item")
+
+    async def healthcheck(self) -> AIProviderHealthCheck:
+        return AIProviderHealthCheck(
+            provider_name="stub",
+            reachable=True,
+            message="stub provider is always available for local smoke usage",
+            metadata={"provider": "stub"},
+        )
 
     async def execute(
         self,

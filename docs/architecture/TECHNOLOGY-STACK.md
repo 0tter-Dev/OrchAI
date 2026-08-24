@@ -38,6 +38,8 @@ provider SDK, or transport implementation.
 
   Testing                             pytest
 
+  Linting / Formatting                `ruff` (pinned `==0.15.11`)
+
   API Schema                          OpenAPI through FastAPI
 
   Containerization                    Docker
@@ -169,6 +171,10 @@ pytest is the initial test framework.
 Testing must cover domain invariants independently from infrastructure
 and provide integration coverage for adapter contracts, persistence,
 event handling, API/CLI boundaries, and end-to-end task/execution flows.
+
+## Linting
+
+`ruff` is the linting and formatting tool. Its version is pinned exactly (`==0.15.11`) in the `dev` dependency group rather than a lower-bound range like the project's other dependencies, because `ruff`'s default enabled rule set has changed across minor releases (observed directly: 0.16.4 flags import-sorting issues on files that 0.15.11 -- the version this project has always used -- reports as clean). An unpinned `ruff` can fail CI on unchanged code purely from picking up a newer default rule set, with no actual regression in the codebase. Always invoke it through the project environment (`uv run ruff check`), not as an ephemeral tool (`uv tool run ruff` / `uvx ruff`), so the pinned version is the one that actually runs.
 
 ## Containerization
 

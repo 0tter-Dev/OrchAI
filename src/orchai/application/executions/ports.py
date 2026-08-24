@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
-from typing import Protocol
+from typing import Any, Protocol
 
 from orchai.domain.actions import ActionName
-from orchai.domain.executions import Execution
+from orchai.domain.executions import Execution, ExecutionState
 from orchai.domain.identifiers import ExecutionId, ModelId, ProjectId, TaskId
 from orchai.domain.roles import RoleName
 
@@ -24,6 +23,16 @@ class ExecutionRepository(Protocol):
 
     async def save(self, execution: Execution) -> None:
         """Persist changes to an execution."""
+
+    async def list(
+        self,
+        *,
+        task_id: TaskId | None = None,
+        project_id: ProjectId | None = None,
+        state: ExecutionState | None = None,
+        limit: int = 20,
+    ) -> tuple[Execution, ...]:
+        """Return persisted executions."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +78,21 @@ class AIProviderExecutionResult:
             raise ValueError("provider_name must not be empty")
 
 
+@dataclass(frozen=True, slots=True)
+class AIProviderHealthCheck:
+    """Provider-independent operational health information."""
+
+    provider_name: str
+    reachable: bool
+    configured_model: str = ""
+    message: str = ""
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.provider_name.strip():
+            raise ValueError("provider_name must not be empty")
+
+
 class AIProviderError(RuntimeError):
     """Stable provider-boundary error raised by AI adapters."""
 
@@ -89,6 +113,9 @@ class AIProviderPort(Protocol):
 
     async def validate_request(self, request: AIProviderExecutionRequest) -> None:
         """Validate a bounded request before execution."""
+
+    async def healthcheck(self) -> AIProviderHealthCheck:
+        """Return provider operational health information."""
 
     async def execute(
         self,

@@ -10,6 +10,7 @@ from orchai.application.executions.ports import (
     AIProviderError,
     AIProviderExecutionRequest,
     AIProviderExecutionResult,
+    AIProviderHealthCheck,
     AIProviderPort,
 )
 
@@ -34,6 +35,34 @@ class OllamaAIProviderAdapter(AIProviderPort):
             from orchai.application.executions.ports import AIProviderValidationError
 
             raise AIProviderValidationError("model_id must not be empty")
+
+    async def healthcheck(self) -> AIProviderHealthCheck:
+        try:
+            async with httpx.AsyncClient(
+                base_url=self._base_url,
+                timeout=self._timeout_seconds,
+            ) as client:
+                response = await client.get("/api/tags")
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            return AIProviderHealthCheck(
+                provider_name="ollama",
+                reachable=False,
+                message=f"ollama healthcheck failed: {exc}",
+                metadata={"base_url": self._base_url},
+            )
+
+        data = response.json()
+        models = data.get("models", [])
+        return AIProviderHealthCheck(
+            provider_name="ollama",
+            reachable=True,
+            message="ollama responded successfully",
+            metadata={
+                "base_url": self._base_url,
+                "model_count": str(len(models)),
+            },
+        )
 
     async def execute(
         self,

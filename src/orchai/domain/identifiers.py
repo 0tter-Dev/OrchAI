@@ -19,7 +19,7 @@ class Identifier:
         object.__setattr__(self, "value", normalized)
 
     @classmethod
-    def new(cls) -> "Identifier":
+    def new(cls) -> Identifier:
         return cls(str(uuid4()))
 
     def __str__(self) -> str:
@@ -84,3 +84,27 @@ class CorrelationId(Identifier):
 
 class CausationId(Identifier):
     """Stable causation identity."""
+
+
+class UserId(Identifier):
+    """Stable identity-and-access-management user identity."""
+
+
+class AccessRoleId(Identifier):
+    """Stable access-role identity (identity/authorization grouping).
+
+    Distinct from the reserved, unused `RoleId` above: `RoleId` was set
+    aside for a *task* role identity mirroring `RoleName`
+    (`domain.roles`), while `AccessRoleId` names a *permission-bundle*
+    role in the identity/access-management layer (ADR-012). The two are
+    intentionally kept separate to avoid a second, incompatible meaning
+    for "role" in the codebase.
+    """
+
+
+class PermissionId(Identifier):
+    """Stable identity-and-access-management permission identity."""
+
+
+class RefreshTokenId(Identifier):
+    """Stable refresh token identity."""

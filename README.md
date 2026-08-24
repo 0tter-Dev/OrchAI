@@ -10,39 +10,40 @@ business logic in the core.
 
 ## Current Status
 
-Version: `v0.1.1`
+Version: `v0.1.11`
 
 The current implementation is an executable foundation, not a complete
 product.
 
-Implemented and tested:
+This section is intentionally a short summary, not the authoritative
+status — it drifts if maintained as a second copy of the same facts.
+For the current, detailed state of every area (what is `DEFINED`,
+`DECIDED`, `PARTIAL`, or `IMPLEMENTED`), see
+[docs/STATUS.md](docs/STATUS.md); for what remains as an explicitly
+tracked gap, see the "Lacunas conhecidas" section of
+[docs/API-ENDPOINTS-REPORT.md](docs/API-ENDPOINTS-REPORT.md).
 
-- task lifecycle and state transitions;
-- authorization requests and decisions;
-- first policy slice separated from authorization;
-- persisted-vs-observed project readiness/security with editable effective profile;
-- execution lifecycle and results;
-- async execution through a provider-independent AI adapter boundary;
-- provider request validation and provider capability contract surface;
-- role, action, model, and capability vocabularies;
-- context references, context packages, and context-resolution metadata;
-- local filesystem project adapter discovery, context reads, bounded writes, test runs, limited command runs, and Git status checks behind capabilities;
-- durable event and audit history;
-- operational metrics derived from execution events with idempotent record ids;
-- task-state suggestions for planning, implementation, review, validation, test, and documentation steps with `MANUAL`/`SUGGESTED`/`AUTOMATIC` enforcement;
-- architectural boundary checks for layer imports;
-- Typer CLI with a minimal local flow, persisted project inspection, security-profile editing, and project-filtered observability commands;
-- protected project operations routed through orchestration, policy, authorization, readiness gates, and Project Adapter capabilities;
-- SQLAlchemy persistence with SQLite and PostgreSQL migration support.
-
-Still pending or partial:
-
-- richer policy configuration beyond the initial local policy slice;
-- multiple production-grade provider implementations beyond stub/Ollama;
-- FastAPI interface;
-- deployment/container setup;
-- distributed/background execution infrastructure;
-- real CI/CD automation flows.
+At a high level, the operational foundation is implemented end to end:
+task lifecycle, authorization, policy, execution, context resolution,
+project adapters, events, audit, metrics, suggestions, and SQLAlchemy
+persistence (SQLite for local/test use, PostgreSQL as the production
+default) are all covered by the CLI and the HTTP API, with the
+`/requests` chat-first surface (ADR-011) as the primary integration
+point. Identity and access management (JWT authentication, persisted
+users/permissions, a superuser role), documented in ADR-012 and
+[docs/architecture/IDENTITY-AND-ACCESS-MODEL.md](docs/architecture/IDENTITY-AND-ACCESS-MODEL.md),
+is now implemented end to end — `POST /auth/login` / `POST /auth/refresh`
+/ `POST /auth/logout`, `orchai auth login` / `orchai auth logout` /
+`orchai auth bootstrap-admin`, a permission check on every other
+route/command, and an admin-facing CRUD layer for users/access-roles/
+projects plus a self-service `/me` surface (`orchai users *` /
+`orchai access-roles *` / `orchai me *`) — but enforcement is opt-in: set
+`ORCHAI_AUTH_ENFORCED=true` to require it, since the default (`false`)
+keeps every endpoint unauthenticated exactly as before, per the rollout
+plan in that document.
+Real AI provider adapters (beyond the deterministic `stub` provider),
+deployment/container automation, and execution cancellation remain
+pending.
 
 ## Requirements
 
@@ -68,30 +69,128 @@ The current configuration surface reads the process environment first
 and then a local `.env` file.
 
 ``` powershell
-$env:ORCHAI_DATABASE_URL = "sqlite:///.orchai/orchai.db"
-```
-
-SQLite is the default local backend. PostgreSQL URLs are accepted and
-normalized to the SQLAlchemy `postgresql+psycopg` driver form.
-
-``` powershell
 $env:ORCHAI_DATABASE_URL = "postgresql://orchai:password@localhost:5432/orchai"
 ```
 
-## CLI
+PostgreSQL is the explicit production default: it is what the runtime
+assumes when `ORCHAI_DATABASE_URL` is not set at all. PostgreSQL URLs are
+accepted and normalized to the SQLAlchemy `postgresql+psycopg` driver form.
 
-Apply database migrations:
+SQLite remains fully supported, but only as a secondary option meant to
+keep local development and automated tests fast and dependency-free. Set
+it explicitly with a full URL or the `sqlite`/`local` shorthand:
 
 ``` powershell
-uv run orchai db migrate
+$env:ORCHAI_DATABASE_URL = "sqlite:///.orchai/orchai.db"
+# or, equivalently and shorter:
+$env:ORCHAI_DATABASE_URL = "sqlite"
 ```
 
-Create a PostgreSQL database when the server is already running:
+The runtime now also supports explicit AI provider and API settings:
+
+``` powershell
+$env:ORCHAI_AI_PROVIDER = "ollama"
+$env:ORCHAI_AI_BASE_URL = "http://localhost:11434"
+$env:ORCHAI_AI_MODEL = "qwen2.5-coder:latest"
+$env:ORCHAI_API_HOST = "127.0.0.1"
+$env:ORCHAI_API_PORT = "8000"
+```
+
+For OpenAI/Codex-style cloud execution:
+
+``` powershell
+$env:ORCHAI_AI_PROVIDER = "openai"
+$env:ORCHAI_AI_API_KEY = "your_api_key"
+$env:ORCHAI_AI_MODEL = "gpt-5-codex"
+```
+
+Authentication is wired in but opt-in (ADR-012, Phase 3): every route and
+command carries a permission requirement, but it is only enforced once
+`ORCHAI_AUTH_ENFORCED` is set to `true`.
+
+``` powershell
+$env:ORCHAI_AUTH_ENFORCED = "true"
+$env:ORCHAI_AUTH_SECRET_KEY = "a-real-secret-change-me"
+$env:ORCHAI_ADMIN_USERNAME = "admin"
+$env:ORCHAI_ADMIN_PASSWORD = "change-me"
+```
+
+Bootstrap the first superuser (only works while zero users exist yet),
+then log in — the CLI persists the resulting token pair to
+`~/.orchai/credentials.json` and reuses it for later commands:
+
+``` powershell
+uv run orchai auth bootstrap-admin
+uv run orchai auth login --username admin --password change-me
+uv run orchai auth logout
+```
+
+An `ORCHAI_TOKEN` environment variable is checked before the local
+credentials file, for non-interactive/CI use. HTTP clients send the
+access token from `POST /auth/login` (or `POST /auth/refresh`) as
+`Authorization: Bearer <token>` on every subsequent request.
+
+Run a consolidated operational check before serving the API or using a
+shared database:
+
+``` powershell
+uv run orchai runtime check
+```
+
+For API-first consumers, the HTTP surface now exposes a root index and
+provider settings entry points in addition to the runtime checks:
+
+```text
+GET /
+GET /settings/runtime
+GET /providers/settings
+GET /providers/capabilities
+GET /providers/health
+```
+
+## Guides
+
+- [User onboarding guide](docs/USER-ONBOARDING.md)
+- [User operations guide](docs/USER-OPERATIONS-GUIDE.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Delivery baseline](docs/engineering/DELIVERY-BASELINE.md)
+- [Documentation index](docs/INDEX.md)
+
+## CLI
+
+The CLI remains important for operations and local administration, but
+the intended main integration boundary is now the HTTP API.
+
+`db sync` is the single, standard database administration command: it
+creates the target database when needed (PostgreSQL only) and then
+applies migrations, in one step.
 
 ``` powershell
 $env:ORCHAI_DATABASE_URL = "postgresql://postgres:password@localhost:5432/orchai"
-uv run orchai db create
-uv run orchai db migrate
+uv run orchai db sync
+```
+
+For a fast local/test run with no PostgreSQL server at all, use the
+secondary SQLite option instead — the create step is skipped
+(informational, not an error), and migrations still run:
+
+``` powershell
+$env:ORCHAI_DATABASE_URL = "sqlite"
+uv run orchai db sync
+```
+
+Inspect effective provider settings:
+
+``` powershell
+uv run orchai providers show
+uv run orchai providers capabilities
+uv run orchai runtime check
+```
+
+Serve the API with the configured host and port:
+
+``` powershell
+uv run orchai api serve
 ```
 
 Run the minimal local orchestration flow:
@@ -117,9 +216,16 @@ Run the same initial operation through bounded automatic mode:
 uv run orchai local-flow . docs/INDEX.md --execution-mode AUTOMATIC
 ```
 
+Run the same flow with a configured cloud provider target:
+
+``` powershell
+uv run orchai local-flow . docs/INDEX.md --provider-target CLOUD --approve-suggestion
+```
+
 Discover project resources through the filesystem Project Adapter:
 
 ``` powershell
+uv run orchai projects register .
 uv run orchai projects discover . --limit 20
 ```
 
@@ -127,6 +233,7 @@ Inspect observed vs effective persisted project configuration:
 
 ``` powershell
 uv run orchai projects list
+uv run orchai projects lookup .
 uv run orchai projects show <project-id>
 uv run orchai projects update-security <project-id> --readiness-level LEVEL_3_AUTOMATABLE
 ```
@@ -146,22 +253,70 @@ uv run orchai events list --limit 10
 uv run orchai audit list --limit 10
 uv run orchai metrics list --limit 10
 uv run orchai suggestions list --limit 10
+uv run orchai tasks list --limit 10
+uv run orchai tasks create --title "Direct task" --description "Lifecycle test" --requested-change "Implement feature" --execution-mode SUGGESTED
+uv run orchai tasks transition <task-id> --target-state PLANNING
+uv run orchai tasks snapshot <task-id> --history-limit 50
+uv run orchai tasks advance <task-id> --context-path docs/INDEX.md --approve-stage
+uv run orchai tasks advance <task-id> --stage TEST --approve-stage
+uv run orchai tasks advance <task-id> --stage DOCUMENT --context-path docs/INDEX.md --documentation-path docs/RESULT.md --approve-stage
+uv run orchai tasks list --project-id <project-id> --state PLANNING --limit 10
+uv run orchai authorizations list
+uv run orchai authorizations request <task-id> --role QUALITY_AGENT --action REVIEW --reason "Need explicit review authorization" --requester "operator" --execution-mode SUGGESTED
+uv run orchai authorizations decide <authorization-id> --status GRANTED --decided-by "review-manager" --reason "Approved"
+uv run orchai policies evaluate --execution-mode MANUAL --role DEVELOPER --action IMPLEMENT --requested-model local-demo --effective-model local-demo --current-task-state PLANNED --project-operation WRITE_SOURCE --project-root . --explicit-user-command
+uv run orchai executions list --limit 10
+uv run orchai executions request --task-id <task-id> --role DEVELOPER --action IMPLEMENT --model-id local-demo --authorization-id <authorization-id>
+uv run orchai executions run <execution-id>
+uv run orchai executions dispatch <execution-id>
+uv run orchai executions transition <execution-id> --target-state RUNNING
+uv run orchai executions complete <execution-id> --output "Done" --success
+uv run orchai executions resolve-context <execution-id> --source SOURCE_FILE
+uv run orchai executions list --task-id <task-id> --project-id <project-id> --state COMPLETED --limit 10
 uv run orchai events list --project-id <project-id> --limit 10
 uv run orchai audit list --project-id <project-id> --limit 10
 uv run orchai metrics list --project-id <project-id> --limit 10
 ```
 
+For API-first clients that need one consolidated operational read per
+task, use:
+
+```text
+GET /tasks/{task_id}/snapshot
+POST /tasks/{task_id}/advance
+```
+
 ## Tests
 
 ``` powershell
-uv run pytest
+$timestamp = Get-Date -Format "yyyyMMddHHmmss"
+uv run pytest --basetemp ".pytest-tmp/run-$timestamp"
 ```
 
 The current suite covers unit and integration behavior, including CLI
-execution, SQLite restart-surviving persistence, policy enforcement,
-recovery paths for provider/context failures, architectural dependency
-checks, protected project operations, and the async execution engine
-with fake providers.
+and API execution, SQLite restart-surviving persistence, policy
+enforcement, recovery paths for provider/context failures,
+architectural dependency checks, protected project operations, and the
+async execution engine with fake providers, including API-first async
+dispatch and persisted-state follow-up.
+
+In restricted Windows environments, prefer a workspace-local
+`--basetemp` with a unique suffix per run when the workspace allows it.
+Reusing the same directory may fail on repeated executions, so prefer:
+
+``` powershell
+$timestamp = Get-Date -Format "yyyyMMddHHmmss"
+uv run pytest --basetemp ".pytest-tmp/run-$timestamp"
+```
+
+If the workspace temp directory is blocked, run against a writable
+system temp path instead:
+
+``` powershell
+$timestamp = Get-Date -Format "yyyyMMddHHmmss"
+$base = Join-Path ([System.IO.Path]::GetTempPath()) "orchai-pytest-$timestamp"
+.venv\Scripts\python.exe -m pytest --basetemp $base
+```
 
 ## Architecture
 

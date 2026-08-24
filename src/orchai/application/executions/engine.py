@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 
 from orchai.application.context import ContextService, ResolveExecutionContextCommand
 from orchai.application.executions.commands import (
@@ -24,6 +25,8 @@ from orchai.domain.context import ContextError
 from orchai.domain.executions import Execution, ExecutionState, ResourceUsage
 from orchai.domain.identifiers import ExecutionId
 
+_ACTIVE_EXECUTION_TASKS: dict[ExecutionId, asyncio.Task[Execution]] = {}
+
 
 class ExecutionEngine:
     """Runs authorized executions through a replaceable AI provider adapter."""
@@ -44,7 +47,20 @@ class ExecutionEngine:
     def dispatch(self, execution_id: ExecutionId) -> asyncio.Task[Execution]:
         """Schedule an authorized execution in the current event loop."""
 
-        return asyncio.create_task(self.run(execution_id))
+        active_task = _ACTIVE_EXECUTION_TASKS.get(execution_id)
+        if active_task is not None and not active_task.done():
+            return active_task
+
+        task = asyncio.create_task(self.run(execution_id))
+        _ACTIVE_EXECUTION_TASKS[execution_id] = task
+        task.add_done_callback(_cleanup_active_execution(execution_id))
+        return task
+
+    def is_active(self, execution_id: ExecutionId) -> bool:
+        """Return whether one execution is currently dispatched in-process."""
+
+        active_task = _ACTIVE_EXECUTION_TASKS.get(execution_id)
+        return active_task is not None and not active_task.done()
 
     async def run(self, execution_id: ExecutionId) -> Execution:
         """Run one authorized execution to completion or provider failure."""
@@ -216,3 +232,12 @@ def _validated_provider_result(
         metadata=metadata,
         provider_name=provider_name,
     )
+
+
+def _cleanup_active_execution(
+    execution_id: ExecutionId,
+) -> Callable[[asyncio.Task[Execution]], None]:
+    def _cleanup(_: asyncio.Task[Execution]) -> None:
+        _ACTIVE_EXECUTION_TASKS.pop(execution_id, None)
+
+    return _cleanup

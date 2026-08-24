@@ -16,6 +16,8 @@ from orchai.domain.authorization import (
     RequestedOperation,
 )
 from orchai.domain.events import DomainEvent, EventType
+from orchai.domain.identifiers import AuthorizationId
+from orchai.domain.identifiers import TaskId
 
 
 class AuthorizationService:
@@ -85,6 +87,27 @@ class AuthorizationService:
         )
         return authorization
 
+    async def get_authorization(
+        self,
+        authorization_id: AuthorizationId,
+    ) -> Authorization:
+        return await self._repository.get(authorization_id)
+
+    async def list_authorizations(
+        self,
+        *,
+        task_id: TaskId | None = None,
+        status: AuthorizationDecisionStatus | None = None,
+        pending_only: bool = False,
+        limit: int = 20,
+    ) -> tuple[Authorization, ...]:
+        return await self._repository.list(
+            task_id=task_id,
+            status=status,
+            pending_only=pending_only,
+            limit=limit,
+        )
+
 
 def _decision_event_type(status: AuthorizationDecisionStatus) -> EventType:
     if status is AuthorizationDecisionStatus.GRANTED:
@@ -105,4 +128,3 @@ def _authorization_payload(authorization: Authorization) -> dict[str, str | None
         "model_id": str(operation.model_id) if operation.model_id is not None else None,
         "status": authorization.status.value if authorization.status is not None else None,
     }
-

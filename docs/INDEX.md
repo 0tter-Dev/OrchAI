@@ -12,12 +12,12 @@ provide a stable entry point for humans and AI agents.
 
 ### Architectural Foundation
 
--   [`ARCHITETURAL-CONTRACT.md`](ARCHITETURAL-CONTRACT.md) ---
+-   [`ARCHITECTURAL-CONTRACT.md`](ARCHITECTURAL-CONTRACT.md) ---
     Architectural invariants and non-negotiable principles.
 -   [`ARCHITECTURE.md`](ARCHITECTURE.md) --- High-level system
     architecture and relationships.
--   [`COMPONENTS.md`](COMPONENTS.md) --- Major component
-    responsibilities and boundaries.
+-   [`architecture/COMPONENTS.md`](architecture/COMPONENTS.md) --- Major
+    component responsibilities and boundaries.
 -   [`IMPLEMENTATION-MAP.md`](IMPLEMENTATION-MAP.md) --- Roadmap from
     architecture to implementation.
 
@@ -46,6 +46,19 @@ provide a stable entry point for humans and AI agents.
 
 -   [`../AGENTS.md`](../AGENTS.md) --- Rules and constraints for human
     and AI contributors.
+-   [`../CONTRIBUTING.md`](../CONTRIBUTING.md) --- Practical branch,
+    validation, and pull request baseline for contributors.
+-   [`USER-ONBOARDING.md`](USER-ONBOARDING.md) --- Product-oriented
+    onboarding guide for users adopting OrchAI in real projects.
+-   [`USER-OPERATIONS-GUIDE.md`](USER-OPERATIONS-GUIDE.md) --- Detailed
+    operational guide for configuration, policies, providers, runtime
+    posture, and real-project usage.
+-   [`engineering/DELIVERY-BASELINE.md`](engineering/DELIVERY-BASELINE.md)
+    --- Initial Git/GitHub/CI baseline for safe incremental delivery.
+-   [`domains/AUTHORIZATION.md`](domains/AUTHORIZATION.md) --- Detailed
+    explanation of policy, authorization, and execution boundaries.
+-   [`architecture/CONFIGURATION-ARCHITECTURE.md`](architecture/CONFIGURATION-ARCHITECTURE.md)
+    --- Effective configuration model, precedence, and runtime surface.
 
 ## Documentation Layers
 

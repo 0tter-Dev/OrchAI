@@ -23,7 +23,7 @@ CLIENT / UI
      ▼
 ORCHESTRATION CORE
      │
-     ├── Task Manager
+     ├── Task Engine
      ├── State Machine
      ├── Event Engine
      ├── Execution Engine
@@ -77,7 +77,7 @@ Orchestrator.
 
 ------------------------------------------------------------------------
 
-### 3.2. Task Manager
+### 3.2. Task Engine
 
 #### Responsibility
 
@@ -625,7 +625,7 @@ EXECUTION ENGINE
 
 ------------------------------------------------------------------------
 
-### 5. Decision Boundaries
+## 5. Decision Boundaries
 
 The following decision boundaries must remain explicit.
 
@@ -634,7 +634,7 @@ The following decision boundaries must remain explicit.
   --------------- ---------------------------- --------------------------
   Client          User interaction             Core workflow rules
 
-  Task Manager    Task metadata operations     AI execution
+  Task Engine     Task metadata operations     AI execution
 
   State Machine   Valid state transition       Model selection
 
@@ -670,7 +670,7 @@ The following decision boundaries must remain explicit.
 
 ------------------------------------------------------------------------
 
-### 6. Local and Cloud Execution Boundary
+## 6. Local and Cloud Execution Boundary
 
 The system must treat local and cloud AI as execution providers rather
 than architectural layers.
@@ -712,7 +712,7 @@ The architecture remains unchanged.
 
 ------------------------------------------------------------------------
 
-### 7. Future Parallel Execution
+## 7. Future Parallel Execution
 
 The architecture should allow multiple tasks to execute concurrently in
 the future.
@@ -734,7 +734,7 @@ invalidate task boundaries.
 
 ------------------------------------------------------------------------
 
-## 4. Implementation Boundary Mapping
+## 8. Implementation Boundary Mapping
 
 The logical components above map to the physical architecture as
 follows:
@@ -775,7 +775,7 @@ and infrastructure implementation are separate concerns.
 
 ------------------------------------------------------------------------
 
-## 5. Engine Ownership Rules
+## 9. Engine Ownership Rules
 
 ### Task Engine
 
@@ -803,7 +803,7 @@ authorization decisions unrelated to transition validity.
 
 ------------------------------------------------------------------------
 
-## 6. Project and Context Ownership
+## 10. Project and Context Ownership
 
 The Project Manager and Project Adapter must not be interpreted as a
 project-content database.
@@ -824,7 +824,7 @@ not mirror complete project documentation or source trees by default.
 
 ------------------------------------------------------------------------
 
-## 7. Runtime and Infrastructure Boundary
+## 11. Runtime and Infrastructure Boundary
 
 The first implementation uses `asyncio` tasks for long-running
 execution.

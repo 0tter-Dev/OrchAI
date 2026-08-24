@@ -1,4 +1,9 @@
-"""PostgreSQL database administration."""
+"""Database administration.
+
+Database creation is only meaningful for PostgreSQL today (SQLite/local-flow
+targets are created implicitly on first connection), but the boundary is
+named generically so callers do not need to know which engine is configured.
+"""
 
 from __future__ import annotations
 
@@ -9,19 +14,19 @@ from psycopg import connect, sql
 
 
 @dataclass(frozen=True, slots=True)
-class PostgreSQLDatabaseTarget:
-    """Parsed target and maintenance URLs for a PostgreSQL database."""
+class DatabaseTarget:
+    """Parsed target and maintenance URLs for a database."""
 
     database_name: str
     target_url: str
     maintenance_url: str
 
 
-class PostgreSQLDatabaseAdmin:
-    """Small PostgreSQL administration boundary for local setup."""
+class DatabaseAdmin:
+    """Small database administration boundary for local setup."""
 
     def __init__(self, database_url: str, maintenance_database: str = "postgres") -> None:
-        self.target = parse_postgresql_target(
+        self.target = parse_database_target(
             database_url,
             maintenance_database=maintenance_database,
         )
@@ -44,11 +49,11 @@ class PostgreSQLDatabaseAdmin:
             return True
 
 
-def parse_postgresql_target(
+def parse_database_target(
     database_url: str,
     *,
     maintenance_database: str = "postgres",
-) -> PostgreSQLDatabaseTarget:
+) -> DatabaseTarget:
     normalized = _normalize_postgresql_url(database_url)
     parsed = urlsplit(normalized)
     if parsed.scheme != "postgresql":
@@ -68,7 +73,7 @@ def parse_postgresql_target(
             parsed.fragment,
         )
     )
-    return PostgreSQLDatabaseTarget(
+    return DatabaseTarget(
         database_name=database_name,
         target_url=normalized,
         maintenance_url=maintenance_url,

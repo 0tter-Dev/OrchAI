@@ -61,11 +61,20 @@ internal services instead of repeatedly resolving raw layers.
 
 ## Current Implementation
 
-The current implementation includes a minimal Pydantic-backed
-configuration loader for database settings.
+The current implementation includes a Pydantic-backed configuration
+loader for database, AI provider, and API settings.
 
 ``` text
 ORCHAI_DATABASE_URL
+ORCHAI_AI_PROVIDER
+ORCHAI_AI_BASE_URL
+ORCHAI_AI_API_KEY
+ORCHAI_AI_ORGANIZATION
+ORCHAI_AI_PROJECT
+ORCHAI_AI_MODEL
+ORCHAI_AI_TIMEOUT_SECONDS
+ORCHAI_API_HOST
+ORCHAI_API_PORT
 ```
 
 The loader reads `ORCHAI_DATABASE_URL` from the process environment and
@@ -80,9 +89,22 @@ sqlite:///.orchai/orchai.db
 The loader validates SQLite and PostgreSQL database URLs and normalizes
 plain PostgreSQL URLs to the SQLAlchemy `postgresql+psycopg` driver form.
 
-This is sufficient for the current SQLAlchemy persistence foundation.
-The configuration layer still needs expanded layered overrides, safe
-inspection, and future secret-management integration.
+AI provider configuration currently supports:
+
+``` text
+stub
+ollama
+openai
+```
+
+The API settings currently expose normalized bind host and port values.
+
+The runtime can now inspect effective configuration safely through the
+CLI and API without exposing provider secrets directly.
+
+The configuration layer still needs expanded layered overrides, richer
+task/project/execution-level configuration, and future secret-management
+integration.
 
 ## Invariants
 

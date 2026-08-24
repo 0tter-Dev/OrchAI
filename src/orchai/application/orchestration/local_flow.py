@@ -10,7 +10,10 @@ from orchai.application.orchestration.orchestrator import (
     Orchestrator,
     RunProjectOperationCommand,
     RunLocalFlowCommand,
+    RunTaskWorkflowStageCommand,
+    TaskWorkflowStage,
 )
+from orchai.domain.identifiers import TaskId
 from orchai.domain.projects import ProviderTarget
 from orchai.domain.projects import ProjectOperation
 from orchai.domain.tasks import ExecutionMode
@@ -80,6 +83,45 @@ async def run_project_operation(
             provider_target=provider_target,
             execution_mode=execution_mode,
             approve_operation=approve_operation,
+            automatic_policy=automatic_policy or AutomaticExecutionPolicy(),
+        )
+    )
+    return result.as_dict()
+
+
+async def run_task_workflow_stage(
+    *,
+    task_id: str,
+    dependencies: LocalFlowDependencies,
+    storage_label: str = "provided",
+    model: str = "local-task-stage",
+    stage: TaskWorkflowStage | None = None,
+    context_paths: tuple[str, ...] = (),
+    documentation_path: str = "",
+    test_args: tuple[str, ...] = (),
+    provider_target: ProviderTarget = ProviderTarget.LOCAL,
+    execution_mode: ExecutionMode | None = None,
+    approve_stage: bool = False,
+    requester: str = "operator",
+    decider: str = "operator",
+    automatic_policy: AutomaticExecutionPolicy | None = None,
+) -> dict[str, str]:
+    """Advance one persisted task through one workflow stage."""
+
+    result = await dependencies.orchestrator.run_task_workflow_stage(
+        RunTaskWorkflowStageCommand(
+            task_id=TaskId(task_id),
+            storage_label=storage_label,
+            model=model,
+            stage=stage,
+            context_paths=context_paths,
+            documentation_path=documentation_path,
+            test_args=test_args,
+            provider_target=provider_target,
+            execution_mode=execution_mode,
+            approve_stage=approve_stage,
+            requester=requester,
+            decider=decider,
             automatic_policy=automatic_policy or AutomaticExecutionPolicy(),
         )
     )

@@ -8,7 +8,7 @@ the architecture.
 They complement:
 
 ``` text
-ARCHITETURAL-CONTRACT
+ARCHITECTURAL-CONTRACT
 ARCHITECTURE
 IMPLEMENTATION-MAP
 DOMAIN DOCUMENTATION
@@ -46,4 +46,10 @@ ADR-003  Initial Event Dispatch
 ADR-004  API-First Interface Boundary
 ADR-005  Local/Cloud Provider Boundary
 ADR-006  Suggested Default Execution Mode
+ADR-007  Modular Monolith Architecture
+ADR-008  Async In-Process Execution Baseline
+ADR-009  External Project Content Ownership
+ADR-010  Project Readiness and Security Gates
+ADR-011  Chat-First Request Interface
+ADR-012  Authentication and Access Control for the CLI and API
 ```

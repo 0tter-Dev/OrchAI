@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from orchai.domain.identifiers import TaskId
-from orchai.domain.tasks import Task
+from orchai.domain.identifiers import ProjectId, TaskId
+from orchai.domain.tasks import Task, TaskState
 
 
 class TaskRepository(Protocol):
@@ -20,3 +20,11 @@ class TaskRepository(Protocol):
     async def save(self, task: Task) -> None:
         """Persist changes to an existing task."""
 
+    async def list(
+        self,
+        *,
+        project_id: ProjectId | None = None,
+        state: TaskState | None = None,
+        limit: int = 20,
+    ) -> tuple[Task, ...]:
+        """Return persisted tasks."""

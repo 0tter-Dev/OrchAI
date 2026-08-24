@@ -8,13 +8,24 @@ from orchai.application.executions.ports import (
     AIProviderValidationError,
 )
 from orchai.application.orchestration import RunLocalFlowCommand
-from orchai.application.orchestration.orchestrator import AutomaticExecutionPolicy
+from orchai.application.orchestration.orchestrator import (
+    AutomaticExecutionPolicy,
+    RunTaskWorkflowStageCommand,
+)
 from orchai.bootstrap import build_in_memory_runtime
+from orchai.domain.actions import ActionName
 from orchai.domain.identifiers import TaskId
+from orchai.domain.roles import RoleName
 from orchai.domain.tasks import ExecutionMode
 
 
 def test_execution_engine_invokes_provider_after_authorization(tmp_path) -> None:
+    """run_local_flow advances exactly one gated stage (PLAN, the first one
+    for a freshly created task) — it does not jump ahead to IMPLEMENTED in a
+    single call. See test_local_flow_stops_at_planned_pending_the_next_gated_stage
+    in tests/integration/test_local_flow.py for the full two-call sequence.
+    """
+
     async def run() -> None:
         (tmp_path / ".git").mkdir()
         docs = tmp_path / "docs"
@@ -34,7 +45,7 @@ def test_execution_engine_invokes_provider_after_authorization(tmp_path) -> None
             )
         )
 
-        assert result.task_state == "IMPLEMENTED"
+        assert result.task_state == "PLANNED"
         assert result.execution_state == "COMPLETED"
         assert result.suggestion_status == "ACCEPTED"
         assert provider.request is not None
@@ -74,7 +85,10 @@ def test_execution_engine_maps_provider_error_to_failed_execution(tmp_path) -> N
             )
         )
 
-        assert result.task_state == "IMPLEMENTING"
+        # A failed execution during the (now gated) PLAN stage transitions the
+        # task to BLOCKED via run_task_workflow_stage's failure handling,
+        # rather than leaving it stuck mid-transition.
+        assert result.task_state == "BLOCKED"
         assert result.execution_state == "FAILED"
         metrics = await runtime.metrics_repository.list(
             task_id=TaskId(result.task_id),
@@ -106,7 +120,10 @@ def test_orchestrator_suggested_mode_requires_approval(tmp_path) -> None:
             )
         )
 
-        assert result.task_state == "PLANNED"
+        # Without .git, _resolve_task_stage still moves CREATED -> PLANNING
+        # (pure bookkeeping so the suggestion engine can run), but PLAN itself
+        # is blocked pending approval, so the task never reaches PLANNED.
+        assert result.task_state == "PLANNING"
         assert result.execution_state == ""
         assert result.suggestion_status == "PRESENTED"
         assert result.blocked_reason == "suggested_mode_requires_approval"
@@ -116,6 +133,13 @@ def test_orchestrator_suggested_mode_requires_approval(tmp_path) -> None:
 
 
 def test_orchestrator_automatic_mode_uses_configured_limits(tmp_path) -> None:
+    """AUTOMATIC mode never skips a stage "for free" — PLAN is gated exactly
+    like every other stage, and only proceeds without a human decision when
+    (TASK_PLANNER, PLAN) is explicitly present in
+    AutomaticExecutionPolicy.allowed_operations. The default policy only
+    allows (DEVELOPER, IMPLEMENT), so it denies PLAN until configured.
+    """
+
     async def run() -> None:
         (tmp_path / ".git").mkdir()
         docs = tmp_path / "docs"
@@ -124,20 +148,40 @@ def test_orchestrator_automatic_mode_uses_configured_limits(tmp_path) -> None:
         provider = RecordingProvider()
         runtime = build_in_memory_runtime(ai_provider=provider)
 
-        result = await runtime.orchestrator.run_local_flow(
+        default_policy_result = await runtime.orchestrator.run_local_flow(
             RunLocalFlowCommand(
                 project_root=tmp_path,
                 context_path="docs/INDEX.md",
-                title="Automatic allowed",
+                title="Automatic without configuration",
                 model="fake-model",
                 storage_label="memory",
                 execution_mode=ExecutionMode.AUTOMATIC,
             )
         )
+        assert default_policy_result.task_state == "PLANNING"
+        assert default_policy_result.blocked_reason == "automatic_policy_denied"
+        assert provider.request is None
 
-        assert result.task_state == "IMPLEMENTED"
-        assert result.execution_state == "COMPLETED"
-        assert result.suggestion_status == "ACCEPTED"
+        configured_policy_result = await runtime.orchestrator.run_local_flow(
+            RunLocalFlowCommand(
+                project_root=tmp_path,
+                context_path="docs/INDEX.md",
+                title="Automatic with PLAN explicitly configured",
+                model="fake-model",
+                storage_label="memory",
+                execution_mode=ExecutionMode.AUTOMATIC,
+                automatic_policy=AutomaticExecutionPolicy(
+                    allowed_operations=(
+                        (RoleName.TASK_PLANNER, ActionName.PLAN),
+                        (RoleName.DEVELOPER, ActionName.IMPLEMENT),
+                    ),
+                ),
+            )
+        )
+        assert configured_policy_result.task_state == "PLANNED"
+        assert configured_policy_result.execution_state == "COMPLETED"
+        assert configured_policy_result.suggestion_status == "ACCEPTED"
+        assert configured_policy_result.blocked_reason == ""
         assert provider.request is not None
 
     asyncio.run(run())
@@ -163,7 +207,9 @@ def test_orchestrator_automatic_mode_blocks_disallowed_operation(tmp_path) -> No
             )
         )
 
-        assert result.task_state == "PLANNED"
+        # Same shift as the SUGGESTED-mode case above: the block now happens
+        # at PLAN itself, so the task never gets past PLANNING.
+        assert result.task_state == "PLANNING"
         assert result.execution_state == ""
         assert result.suggestion_status == "PRESENTED"
         assert result.blocked_reason == "automatic_policy_denied"
@@ -173,6 +219,14 @@ def test_orchestrator_automatic_mode_blocks_disallowed_operation(tmp_path) -> No
 
 
 def test_orchestrator_blocks_source_changes_when_project_has_no_git(tmp_path) -> None:
+    """The git-readiness gate applies to source-writing stages (IMPLEMENT),
+    not to PLAN (a read-only planning step) — so run_local_flow's single
+    gated PLAN stage completes normally even with no .git directory. The
+    block only appears once IMPLEMENT is explicitly advanced afterwards,
+    mirroring the two-call sequence in
+    test_local_flow_stops_at_planned_pending_the_next_gated_stage.
+    """
+
     async def run() -> None:
         docs = tmp_path / "docs"
         docs.mkdir()
@@ -180,7 +234,7 @@ def test_orchestrator_blocks_source_changes_when_project_has_no_git(tmp_path) ->
         provider = RecordingProvider()
         runtime = build_in_memory_runtime(ai_provider=provider)
 
-        result = await runtime.orchestrator.run_local_flow(
+        plan_result = await runtime.orchestrator.run_local_flow(
             RunLocalFlowCommand(
                 project_root=tmp_path,
                 context_path="docs/INDEX.md",
@@ -191,11 +245,27 @@ def test_orchestrator_blocks_source_changes_when_project_has_no_git(tmp_path) ->
             )
         )
 
-        assert result.task_state == "PLANNED"
-        assert result.execution_state == ""
-        assert result.suggestion_status == "PRESENTED"
-        assert result.blocked_reason == "source_write_requires_level_1"
-        assert provider.request is None
+        assert plan_result.task_state == "PLANNED"
+        assert plan_result.execution_state == "COMPLETED"
+        assert plan_result.blocked_reason == ""
+
+        implement_result = await runtime.orchestrator.run_task_workflow_stage(
+            RunTaskWorkflowStageCommand(
+                task_id=TaskId(plan_result.task_id),
+                storage_label="memory",
+                model="fake-model",
+                context_paths=("docs/INDEX.md",),
+                approve_stage=True,
+            )
+        )
+
+        assert implement_result.task_state == "PLANNED"
+        assert implement_result.execution_state == ""
+        assert implement_result.suggestion_status == "PRESENTED"
+        assert implement_result.blocked_reason == "source_write_requires_level_1"
+        # The provider was invoked once, for the PLAN stage above — the
+        # blocked IMPLEMENT stage never reaches execution at all.
+        assert provider.request is not None
 
     asyncio.run(run())
 
@@ -219,7 +289,9 @@ def test_execution_engine_maps_provider_validation_error_to_failed_execution(tmp
             )
         )
 
-        assert result.task_state == "IMPLEMENTING"
+        # Same BLOCKED transition on execution failure as the provider-error
+        # case above.
+        assert result.task_state == "BLOCKED"
         assert result.execution_state == "FAILED"
         metrics = await runtime.metrics_repository.list(
             task_id=TaskId(result.task_id),

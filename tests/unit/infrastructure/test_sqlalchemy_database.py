@@ -21,4 +21,6 @@ def test_sqlalchemy_database_applies_migrations_once(tmp_path) -> None:
         "0004",
         "0005",
         "0006",
+        "0007",
+        "0008",
     ]

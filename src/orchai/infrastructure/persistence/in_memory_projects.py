@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from orchai.application.projects.ports import ProjectRepository
-from orchai.domain.identifiers import ProjectId
+from orchai.application.projects.ports import (
+    ProjectConnectionRepository,
+    ProjectRepository,
+)
+from orchai.domain.identifiers import ProjectId, UserId
 from orchai.domain.projects import Project
 
 
@@ -38,3 +41,19 @@ class InMemoryProjectRepository(ProjectRepository):
 
     async def list(self) -> tuple[Project, ...]:
         return tuple(self._projects.values())
+
+
+class InMemoryProjectConnectionRepository(ProjectConnectionRepository):
+    """Simple non-durable project<->user connection reference store."""
+
+    def __init__(self) -> None:
+        self._links: set[tuple[ProjectId, UserId]] = set()
+
+    async def link(self, project_id: ProjectId, user_id: UserId) -> None:
+        self._links.add((project_id, user_id))
+
+    async def list_project_ids_for_user(self, user_id: UserId) -> tuple[ProjectId, ...]:
+        return tuple(pid for (pid, uid) in self._links if uid == user_id)
+
+    async def list_user_ids_for_project(self, project_id: ProjectId) -> tuple[UserId, ...]:
+        return tuple(uid for (pid, uid) in self._links if pid == project_id)

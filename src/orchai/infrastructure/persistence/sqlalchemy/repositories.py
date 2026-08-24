@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, insert, select, update
@@ -14,8 +14,24 @@ from orchai.application.authorization.ports import AuthorizationRepository
 from orchai.application.context.ports import ContextResolutionRepository
 from orchai.application.events.ports import EventRepository
 from orchai.application.executions.ports import ExecutionRepository
+from orchai.application.identity.ports import (
+    AccessControlRepository,
+    AccessRoleRepository,
+)
+from orchai.application.identity.ports import (
+    PermissionRepository as IdentityPermissionRepository,
+)
+from orchai.application.identity.ports import (
+    RefreshTokenRepository as IdentityRefreshTokenRepository,
+)
+from orchai.application.identity.ports import (
+    UserRepository as IdentityUserRepository,
+)
 from orchai.application.metrics.ports import MetricsRepository
-from orchai.application.projects.ports import ProjectRepository
+from orchai.application.projects.ports import (
+    ProjectConnectionRepository,
+    ProjectRepository,
+)
 from orchai.application.suggestions.ports import SuggestionRepository
 from orchai.application.tasks.ports import TaskRepository
 from orchai.domain.actions import ActionName
@@ -28,15 +44,20 @@ from orchai.domain.authorization import (
     RequestedOperation,
 )
 from orchai.domain.capabilities import CapabilityName
-from orchai.domain.context import ContextReference, ContextResolutionRecord, ContextSource
+from orchai.domain.context import (
+    ContextReference,
+    ContextResolutionRecord,
+    ContextSource,
+)
+from orchai.domain.events import DomainEvent, EventType
 from orchai.domain.executions import (
     Execution,
     ExecutionResult,
     ExecutionState,
     ResourceUsage,
 )
-from orchai.domain.events import DomainEvent, EventType
 from orchai.domain.identifiers import (
+    AccessRoleId,
     AuditRecordId,
     AuthorizationDecisionId,
     AuthorizationId,
@@ -47,10 +68,14 @@ from orchai.domain.identifiers import (
     ExecutionId,
     MetricRecordId,
     ModelId,
+    PermissionId,
     ProjectId,
+    RefreshTokenId,
     SuggestionId,
     TaskId,
+    UserId,
 )
+from orchai.domain.identity import AccessRole, Permission, RefreshToken, User
 from orchai.domain.metrics import MetricRecord
 from orchai.domain.projects import (
     Project,
@@ -63,6 +88,7 @@ from orchai.domain.suggestions import Suggestion, SuggestionStatus
 from orchai.domain.tasks import ExecutionMode, Task, TaskScope, TaskState
 from orchai.infrastructure.persistence.sqlalchemy.database import SQLAlchemyDatabase
 from orchai.infrastructure.persistence.sqlalchemy.tables import (
+    access_roles_table,
     audit_records_table,
     authorization_decisions_table,
     authorization_requests_table,
@@ -70,9 +96,16 @@ from orchai.infrastructure.persistence.sqlalchemy.tables import (
     events_table,
     executions_table,
     metric_records_table,
+    permissions_table,
+    project_connections_table,
     projects_table,
+    refresh_tokens_table,
+    role_permissions_table,
     suggestions_table,
     tasks_table,
+    user_permissions_table,
+    user_roles_table,
+    users_table,
 )
 
 
@@ -108,6 +141,23 @@ class SQLAlchemyTaskRepository(TaskRepository):
                     .where(tasks_table.c.id == values["id"])
                     .values(**values)
                 )
+
+    async def list(
+        self,
+        *,
+        project_id: ProjectId | None = None,
+        state: TaskState | None = None,
+        limit: int = 20,
+    ) -> tuple[Task, ...]:
+        query = select(tasks_table).order_by(tasks_table.c.id.desc())
+        if project_id is not None:
+            query = query.where(tasks_table.c.project_id == str(project_id))
+        if state is not None:
+            query = query.where(tasks_table.c.state == state.value)
+        query = query.limit(_normalize_limit(limit))
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_task_from_row(row._mapping) for row in rows)
 
 
 class SQLAlchemyProjectRepository(ProjectRepository):
@@ -159,6 +209,48 @@ class SQLAlchemyProjectRepository(ProjectRepository):
         with self._database.engine.begin() as connection:
             rows = connection.execute(query).all()
         return tuple(_project_from_row(row._mapping) for row in rows)
+
+
+class SQLAlchemyProjectConnectionRepository(ProjectConnectionRepository):
+    """SQLAlchemy-backed project<->user connection reference store."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def link(self, project_id: ProjectId, user_id: UserId) -> None:
+        with self._database.engine.begin() as connection:
+            exists = connection.execute(
+                select(project_connections_table.c.project_id).where(
+                    project_connections_table.c.project_id == str(project_id),
+                    project_connections_table.c.user_id == str(user_id),
+                )
+            ).first()
+            if exists is None:
+                connection.execute(
+                    insert(project_connections_table).values(
+                        project_id=str(project_id),
+                        user_id=str(user_id),
+                        connected_at=datetime.now(UTC).isoformat(),
+                    )
+                )
+
+    async def list_project_ids_for_user(self, user_id: UserId) -> tuple[ProjectId, ...]:
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(
+                select(project_connections_table.c.project_id).where(
+                    project_connections_table.c.user_id == str(user_id)
+                )
+            ).all()
+        return tuple(ProjectId(row._mapping["project_id"]) for row in rows)
+
+    async def list_user_ids_for_project(self, project_id: ProjectId) -> tuple[UserId, ...]:
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(
+                select(project_connections_table.c.user_id).where(
+                    project_connections_table.c.project_id == str(project_id)
+                )
+            ).all()
+        return tuple(UserId(row._mapping["user_id"]) for row in rows)
 
 
 class SQLAlchemyAuthorizationRepository(AuthorizationRepository):
@@ -223,6 +315,66 @@ class SQLAlchemyAuthorizationRepository(AuthorizationRepository):
                     )
                 )
 
+    async def list(
+        self,
+        *,
+        task_id: TaskId | None = None,
+        status: AuthorizationDecisionStatus | None = None,
+        pending_only: bool = False,
+        limit: int = 20,
+    ) -> tuple[Authorization, ...]:
+        normalized_limit = _normalize_limit(limit)
+        # A decision-based filter (status/pending_only) is only known after
+        # decisions are joined in, so widen the candidate window before
+        # filtering rather than truncating to `limit` before we can tell
+        # which rows actually match.
+        fetch_limit = (
+            min(max(normalized_limit * 5, 100), 500)
+            if (status is not None or pending_only)
+            else normalized_limit
+        )
+        query = select(authorization_requests_table).order_by(
+            authorization_requests_table.c.created_at.desc(),
+            authorization_requests_table.c.id.desc(),
+        )
+        if task_id is not None:
+            query = query.where(authorization_requests_table.c.task_id == str(task_id))
+        query = query.limit(fetch_limit)
+        with self._database.engine.begin() as connection:
+            request_rows = connection.execute(query).all()
+            if not request_rows:
+                return ()
+            request_ids = [row._mapping["id"] for row in request_rows]
+            decision_rows = connection.execute(
+                select(authorization_decisions_table)
+                .where(authorization_decisions_table.c.request_id.in_(request_ids))
+                .order_by(
+                    authorization_decisions_table.c.request_id,
+                    authorization_decisions_table.c.decided_at,
+                    authorization_decisions_table.c.id,
+                )
+            ).all()
+
+        decisions_by_request: dict[str, list[Mapping[str, Any]]] = {
+            request_id: [] for request_id in request_ids
+        }
+        for row in decision_rows:
+            mapping = row._mapping
+            decisions_by_request[mapping["request_id"]].append(mapping)
+
+        authorizations = (
+            _authorization_from_rows(
+                request_row._mapping,
+                decisions_by_request[request_row._mapping["id"]],
+            )
+            for request_row in request_rows
+        )
+        if status is not None:
+            authorizations = (a for a in authorizations if a.status is status)
+        if pending_only:
+            authorizations = (a for a in authorizations if a.status is None)
+        return tuple(authorizations)[:normalized_limit]
+
 
 class SQLAlchemyExecutionRepository(ExecutionRepository):
     """SQLAlchemy-backed execution repository."""
@@ -257,6 +409,29 @@ class SQLAlchemyExecutionRepository(ExecutionRepository):
                     .values(**values)
                 )
 
+    async def list(
+        self,
+        *,
+        task_id: TaskId | None = None,
+        project_id: ProjectId | None = None,
+        state: ExecutionState | None = None,
+        limit: int = 20,
+    ) -> tuple[Execution, ...]:
+        query = select(executions_table).order_by(
+            executions_table.c.created_at.desc(),
+            executions_table.c.id.desc(),
+        )
+        if task_id is not None:
+            query = query.where(executions_table.c.task_id == str(task_id))
+        if project_id is not None:
+            query = query.where(executions_table.c.project_id == str(project_id))
+        if state is not None:
+            query = query.where(executions_table.c.state == state.value)
+        query = query.limit(_normalize_limit(limit))
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_execution_from_row(row._mapping) for row in rows)
+
 
 class SQLAlchemyEventRepository(EventRepository):
     """SQLAlchemy-backed durable domain event history."""
@@ -278,6 +453,8 @@ class SQLAlchemyEventRepository(EventRepository):
         *,
         task_id: TaskId | None = None,
         project_id: ProjectId | None = None,
+        execution_id: ExecutionId | None = None,
+        event_type: EventType | None = None,
         limit: int = 20,
     ) -> tuple[DomainEvent, ...]:
         query = select(events_table).order_by(
@@ -288,6 +465,10 @@ class SQLAlchemyEventRepository(EventRepository):
             query = query.where(events_table.c.task_id == str(task_id))
         if project_id is not None:
             query = query.where(events_table.c.project_id == str(project_id))
+        if execution_id is not None:
+            query = query.where(events_table.c.execution_id == str(execution_id))
+        if event_type is not None:
+            query = query.where(events_table.c.event_type == event_type.value)
         query = query.limit(_normalize_limit(limit))
         with self._database.engine.begin() as connection:
             rows = connection.execute(query).all()
@@ -320,11 +501,24 @@ class SQLAlchemyAuditRepository(AuditRepository):
             if exists is None:
                 connection.execute(insert(audit_records_table).values(**values))
 
+    async def get(self, audit_id: AuditRecordId) -> AuditRecord:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(audit_records_table).where(
+                    audit_records_table.c.id == str(audit_id)
+                )
+            ).first()
+        if row is None:
+            raise LookupError(str(audit_id))
+        return _audit_record_from_row(row._mapping)
+
     async def list(
         self,
         *,
         task_id: TaskId | None = None,
         project_id: ProjectId | None = None,
+        execution_id: ExecutionId | None = None,
+        authorization_id: AuthorizationId | None = None,
         limit: int = 20,
     ) -> tuple[AuditRecord, ...]:
         query = select(audit_records_table).order_by(
@@ -335,6 +529,12 @@ class SQLAlchemyAuditRepository(AuditRepository):
             query = query.where(audit_records_table.c.task_id == str(task_id))
         if project_id is not None:
             query = query.where(audit_records_table.c.project_id == str(project_id))
+        if execution_id is not None:
+            query = query.where(audit_records_table.c.execution_id == str(execution_id))
+        if authorization_id is not None:
+            query = query.where(
+                audit_records_table.c.authorization_id == str(authorization_id)
+            )
         query = query.limit(_normalize_limit(limit))
         with self._database.engine.begin() as connection:
             rows = connection.execute(query).all()
@@ -398,6 +598,8 @@ class SQLAlchemyMetricsRepository(MetricsRepository):
         *,
         task_id: TaskId | None = None,
         project_id: ProjectId | None = None,
+        execution_id: ExecutionId | None = None,
+        name: str | None = None,
         limit: int = 20,
     ) -> tuple[MetricRecord, ...]:
         query = select(metric_records_table).order_by(
@@ -408,6 +610,10 @@ class SQLAlchemyMetricsRepository(MetricsRepository):
             query = query.where(metric_records_table.c.task_id == str(task_id))
         if project_id is not None:
             query = query.where(metric_records_table.c.project_id == str(project_id))
+        if execution_id is not None:
+            query = query.where(metric_records_table.c.execution_id == str(execution_id))
+        if name is not None:
+            query = query.where(metric_records_table.c.name == name)
         query = query.limit(_normalize_limit(limit))
         with self._database.engine.begin() as connection:
             rows = connection.execute(query).all()
@@ -440,6 +646,17 @@ class SQLAlchemySuggestionRepository(SuggestionRepository):
                     .values(**values)
                 )
 
+    async def get(self, suggestion_id: SuggestionId) -> Suggestion:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(suggestions_table).where(
+                    suggestions_table.c.id == str(suggestion_id)
+                )
+            ).first()
+        if row is None:
+            raise LookupError(str(suggestion_id))
+        return _suggestion_from_row(row._mapping)
+
     async def list(
         self,
         *,
@@ -456,6 +673,364 @@ class SQLAlchemySuggestionRepository(SuggestionRepository):
         with self._database.engine.begin() as connection:
             rows = connection.execute(query).all()
         return tuple(_suggestion_from_row(row._mapping) for row in rows)
+
+
+class SQLAlchemyUserRepository(IdentityUserRepository):
+    """SQLAlchemy-backed user repository."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add(self, user: User) -> None:
+        await self.save(user)
+
+    async def get(self, user_id: UserId) -> User:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(users_table).where(users_table.c.id == str(user_id))
+            ).first()
+        if row is None:
+            raise LookupError(str(user_id))
+        return _user_from_row(row._mapping)
+
+    async def get_by_username(self, username: str) -> User | None:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(users_table).where(users_table.c.username == username.strip())
+            ).first()
+        return _user_from_row(row._mapping) if row is not None else None
+
+    async def save(self, user: User) -> None:
+        values = _user_to_values(user)
+        with self._database.engine.begin() as connection:
+            exists = connection.execute(
+                select(users_table.c.id).where(users_table.c.id == values["id"])
+            ).first()
+            if exists is None:
+                connection.execute(insert(users_table).values(**values))
+            else:
+                connection.execute(
+                    update(users_table)
+                    .where(users_table.c.id == values["id"])
+                    .values(**values)
+                )
+
+    async def list(
+        self,
+        *,
+        is_active: bool | None = None,
+        limit: int = 20,
+    ) -> tuple[User, ...]:
+        query = select(users_table).order_by(users_table.c.created_at.desc())
+        if is_active is not None:
+            query = query.where(users_table.c.is_active == int(is_active))
+        query = query.limit(_normalize_limit(limit))
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_user_from_row(row._mapping) for row in rows)
+
+
+class SQLAlchemyAccessRoleRepository(AccessRoleRepository):
+    """SQLAlchemy-backed access-role repository."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add(self, role: AccessRole) -> None:
+        with self._database.engine.begin() as connection:
+            connection.execute(insert(access_roles_table).values(**_access_role_to_values(role)))
+
+    async def get(self, role_id: AccessRoleId) -> AccessRole:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(access_roles_table).where(access_roles_table.c.id == str(role_id))
+            ).first()
+        if row is None:
+            raise LookupError(str(role_id))
+        return _access_role_from_row(row._mapping)
+
+    async def get_by_name(self, name: str) -> AccessRole | None:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(access_roles_table).where(
+                    access_roles_table.c.name == name.strip()
+                )
+            ).first()
+        return _access_role_from_row(row._mapping) if row is not None else None
+
+    async def list(self, *, limit: int = 50) -> tuple[AccessRole, ...]:
+        query = select(access_roles_table).order_by(access_roles_table.c.name.asc())
+        query = query.limit(_normalize_limit(limit))
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_access_role_from_row(row._mapping) for row in rows)
+
+
+class SQLAlchemyPermissionRepository(IdentityPermissionRepository):
+    """SQLAlchemy-backed permission repository."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add(self, permission: Permission) -> None:
+        with self._database.engine.begin() as connection:
+            connection.execute(
+                insert(permissions_table).values(**_permission_to_values(permission))
+            )
+
+    async def get(self, permission_id: PermissionId) -> Permission:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(permissions_table).where(
+                    permissions_table.c.id == str(permission_id)
+                )
+            ).first()
+        if row is None:
+            raise LookupError(str(permission_id))
+        return _permission_from_row(row._mapping)
+
+    async def get_by_key(self, key: str) -> Permission | None:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(permissions_table).where(permissions_table.c.key == key.strip())
+            ).first()
+        return _permission_from_row(row._mapping) if row is not None else None
+
+    async def list(self, *, limit: int = 100) -> tuple[Permission, ...]:
+        query = select(permissions_table).order_by(permissions_table.c.key.asc())
+        query = query.limit(_normalize_limit(limit))
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_permission_from_row(row._mapping) for row in rows)
+
+    def seed_catalog(self, catalog: Mapping[str, str]) -> None:
+        """Idempotently ensure every key in `catalog` exists as a Permission row.
+
+        Deliberately synchronous (unlike every other method on this class):
+        called from `bootstrap.runtime.build_sqlalchemy_identity_runtime`
+        right after `database.migrate()`, which is itself a plain sync
+        function invoked from both async FastAPI startup and sync `orchai`
+        CLI entry points. Bridging into the async port there (e.g. via
+        `asyncio.run`) would raise under FastAPI's already-running event
+        loop, so this uses the same raw, synchronous SQLAlchemy Core style
+        as `SQLAlchemyDatabase.migrate()` instead of `self.add()`.
+
+        Without this, `permissions`/`access_roles` start empty in a fresh
+        database and no non-superuser can ever pass a permission check --
+        see `docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §4.
+        """
+        with self._database.engine.begin() as connection:
+            existing_keys = {
+                row._mapping["key"]
+                for row in connection.execute(select(permissions_table.c.key)).all()
+            }
+            missing = {
+                key: description
+                for key, description in catalog.items()
+                if key not in existing_keys
+            }
+            if not missing:
+                return
+            connection.execute(
+                insert(permissions_table),
+                [
+                    _permission_to_values(Permission(key=key, description=description))
+                    for key, description in missing.items()
+                ],
+            )
+
+
+class SQLAlchemyRefreshTokenRepository(IdentityRefreshTokenRepository):
+    """SQLAlchemy-backed refresh-token repository."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add(self, token: RefreshToken) -> None:
+        with self._database.engine.begin() as connection:
+            connection.execute(
+                insert(refresh_tokens_table).values(**_refresh_token_to_values(token))
+            )
+
+    async def get(self, token_id: RefreshTokenId) -> RefreshToken:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(refresh_tokens_table).where(
+                    refresh_tokens_table.c.id == str(token_id)
+                )
+            ).first()
+        if row is None:
+            raise LookupError(str(token_id))
+        return _refresh_token_from_row(row._mapping)
+
+    async def save(self, token: RefreshToken) -> None:
+        values = _refresh_token_to_values(token)
+        with self._database.engine.begin() as connection:
+            connection.execute(
+                update(refresh_tokens_table)
+                .where(refresh_tokens_table.c.id == values["id"])
+                .values(**values)
+            )
+
+    async def list_for_user(
+        self,
+        user_id: UserId,
+        *,
+        active_only: bool = False,
+    ) -> tuple[RefreshToken, ...]:
+        query = select(refresh_tokens_table).where(
+            refresh_tokens_table.c.user_id == str(user_id)
+        )
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        tokens = tuple(_refresh_token_from_row(row._mapping) for row in rows)
+        if active_only:
+            tokens = tuple(token for token in tokens if token.is_active())
+        return tokens
+
+    async def get_by_token_hash(self, token_hash: str) -> RefreshToken | None:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(refresh_tokens_table).where(
+                    refresh_tokens_table.c.token_hash == token_hash
+                )
+            ).first()
+        if row is None:
+            return None
+        return _refresh_token_from_row(row._mapping)
+
+
+class SQLAlchemyAccessControlRepository(AccessControlRepository):
+    """SQLAlchemy-backed store for the identity many-to-many grants."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def assign_role(self, user_id: UserId, role_id: AccessRoleId) -> None:
+        with self._database.engine.begin() as connection:
+            exists = connection.execute(
+                select(user_roles_table.c.user_id).where(
+                    user_roles_table.c.user_id == str(user_id),
+                    user_roles_table.c.role_id == str(role_id),
+                )
+            ).first()
+            if exists is None:
+                connection.execute(
+                    insert(user_roles_table).values(
+                        user_id=str(user_id), role_id=str(role_id)
+                    )
+                )
+
+    async def revoke_role(self, user_id: UserId, role_id: AccessRoleId) -> None:
+        with self._database.engine.begin() as connection:
+            connection.execute(
+                delete(user_roles_table).where(
+                    user_roles_table.c.user_id == str(user_id),
+                    user_roles_table.c.role_id == str(role_id),
+                )
+            )
+
+    async def grant_permission(self, user_id: UserId, permission_id: PermissionId) -> None:
+        with self._database.engine.begin() as connection:
+            exists = connection.execute(
+                select(user_permissions_table.c.user_id).where(
+                    user_permissions_table.c.user_id == str(user_id),
+                    user_permissions_table.c.permission_id == str(permission_id),
+                )
+            ).first()
+            if exists is None:
+                connection.execute(
+                    insert(user_permissions_table).values(
+                        user_id=str(user_id), permission_id=str(permission_id)
+                    )
+                )
+
+    async def revoke_permission(
+        self,
+        user_id: UserId,
+        permission_id: PermissionId,
+    ) -> None:
+        with self._database.engine.begin() as connection:
+            connection.execute(
+                delete(user_permissions_table).where(
+                    user_permissions_table.c.user_id == str(user_id),
+                    user_permissions_table.c.permission_id == str(permission_id),
+                )
+            )
+
+    async def add_permission_to_role(
+        self,
+        role_id: AccessRoleId,
+        permission_id: PermissionId,
+    ) -> None:
+        with self._database.engine.begin() as connection:
+            exists = connection.execute(
+                select(role_permissions_table.c.role_id).where(
+                    role_permissions_table.c.role_id == str(role_id),
+                    role_permissions_table.c.permission_id == str(permission_id),
+                )
+            ).first()
+            if exists is None:
+                connection.execute(
+                    insert(role_permissions_table).values(
+                        role_id=str(role_id), permission_id=str(permission_id)
+                    )
+                )
+
+    async def remove_permission_from_role(
+        self,
+        role_id: AccessRoleId,
+        permission_id: PermissionId,
+    ) -> None:
+        with self._database.engine.begin() as connection:
+            connection.execute(
+                delete(role_permissions_table).where(
+                    role_permissions_table.c.role_id == str(role_id),
+                    role_permissions_table.c.permission_id == str(permission_id),
+                )
+            )
+
+    async def list_role_ids_for_user(self, user_id: UserId) -> tuple[AccessRoleId, ...]:
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(
+                select(user_roles_table.c.role_id).where(
+                    user_roles_table.c.user_id == str(user_id)
+                )
+            ).all()
+        return tuple(AccessRoleId(row._mapping["role_id"]) for row in rows)
+
+    async def list_user_ids_for_role(self, role_id: AccessRoleId) -> tuple[UserId, ...]:
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(
+                select(user_roles_table.c.user_id).where(
+                    user_roles_table.c.role_id == str(role_id)
+                )
+            ).all()
+        return tuple(UserId(row._mapping["user_id"]) for row in rows)
+
+    async def list_direct_permission_ids_for_user(
+        self,
+        user_id: UserId,
+    ) -> tuple[PermissionId, ...]:
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(
+                select(user_permissions_table.c.permission_id).where(
+                    user_permissions_table.c.user_id == str(user_id)
+                )
+            ).all()
+        return tuple(PermissionId(row._mapping["permission_id"]) for row in rows)
+
+    async def list_permission_ids_for_role(
+        self,
+        role_id: AccessRoleId,
+    ) -> tuple[PermissionId, ...]:
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(
+                select(role_permissions_table.c.permission_id).where(
+                    role_permissions_table.c.role_id == str(role_id)
+                )
+            ).all()
+        return tuple(PermissionId(row._mapping["permission_id"]) for row in rows)
 
 
 def _task_to_values(task: Task) -> dict[str, Any]:
@@ -663,6 +1238,88 @@ def _suggestion_to_values(suggestion: Suggestion) -> dict[str, Any]:
         "generated_at": suggestion.generated_at.isoformat(),
         "metadata": _to_json(suggestion.metadata),
     }
+
+
+def _user_to_values(user: User) -> dict[str, Any]:
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "email": user.email,
+        "password_hash": user.password_hash,
+        "is_superuser": int(user.is_superuser),
+        "is_active": int(user.is_active),
+        "created_at": user.created_at.isoformat(),
+        "updated_at": user.updated_at.isoformat(),
+    }
+
+
+def _access_role_to_values(role: AccessRole) -> dict[str, Any]:
+    return {
+        "id": str(role.id),
+        "name": role.name,
+        "description": role.description,
+    }
+
+
+def _permission_to_values(permission: Permission) -> dict[str, Any]:
+    return {
+        "id": str(permission.id),
+        "key": permission.key,
+        "description": permission.description,
+    }
+
+
+def _refresh_token_to_values(token: RefreshToken) -> dict[str, Any]:
+    return {
+        "id": str(token.id),
+        "user_id": str(token.user_id),
+        "token_hash": token.token_hash,
+        "issued_at": token.issued_at.isoformat(),
+        "expires_at": token.expires_at.isoformat(),
+        "revoked_at": token.revoked_at.isoformat() if token.revoked_at is not None else None,
+    }
+
+
+def _user_from_row(row: Mapping[str, Any]) -> User:
+    return User(
+        id=UserId(row["id"]),
+        username=row["username"],
+        email=row["email"],
+        password_hash=row["password_hash"],
+        is_superuser=bool(row["is_superuser"]),
+        is_active=bool(row["is_active"]),
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+    )
+
+
+def _access_role_from_row(row: Mapping[str, Any]) -> AccessRole:
+    return AccessRole(
+        id=AccessRoleId(row["id"]),
+        name=row["name"],
+        description=row["description"],
+    )
+
+
+def _permission_from_row(row: Mapping[str, Any]) -> Permission:
+    return Permission(
+        id=PermissionId(row["id"]),
+        key=row["key"],
+        description=row["description"],
+    )
+
+
+def _refresh_token_from_row(row: Mapping[str, Any]) -> RefreshToken:
+    return RefreshToken(
+        id=RefreshTokenId(row["id"]),
+        user_id=UserId(row["user_id"]),
+        token_hash=row["token_hash"],
+        issued_at=datetime.fromisoformat(row["issued_at"]),
+        expires_at=datetime.fromisoformat(row["expires_at"]),
+        revoked_at=datetime.fromisoformat(row["revoked_at"])
+        if row["revoked_at"] is not None
+        else None,
+    )
 
 
 def _task_from_row(row: Mapping[str, Any]) -> Task:

@@ -19,6 +19,7 @@ from orchai.domain.executions import (
     ExecutionStateMachine,
     ExecutionTransition,
 )
+from orchai.domain.identifiers import ExecutionId, ProjectId, TaskId
 
 
 class ExecutionService:
@@ -129,6 +130,24 @@ class ExecutionService:
             )
         )
         return execution
+
+    async def get_execution(self, execution_id: ExecutionId) -> Execution:
+        return await self._repository.get(execution_id)
+
+    async def list_executions(
+        self,
+        *,
+        task_id: TaskId | None = None,
+        project_id: ProjectId | None = None,
+        state: ExecutionState | None = None,
+        limit: int = 20,
+    ) -> tuple[Execution, ...]:
+        return await self._repository.list(
+            task_id=task_id,
+            project_id=project_id,
+            state=state,
+            limit=limit,
+        )
 
 
 def _transition_event_type(target: ExecutionState) -> EventType:

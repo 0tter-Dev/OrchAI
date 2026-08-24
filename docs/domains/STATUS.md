@@ -8,24 +8,47 @@ domain model.
 It intentionally remains concise. Detailed rules belong to the
 individual domain documents.
 
+> **Reconciliation note (2026-08-23, v0.1.7):** this document previously
+> marked every domain `PARTIAL` while `docs/STATUS.md` and
+> `docs/architecture/STATUS.md` already marked the corresponding areas
+> `IMPLEMENTED`. That was documentation drift, not a real
+> disagreement: this file had not been updated since 2026-08-20, before
+> several domains reached their current implemented-and-tested state
+> (confirmed directly against the code and a clean `124 passed` test
+> run during this reconciliation). The table below now matches
+> `docs/STATUS.md`. See `docs/TO-DO.md` for what remains open at the
+> application/infrastructure level (IAM, `AutomaticExecutionPolicy`
+> runtime configuration, execution cancellation, metrics aggregation,
+> an Anthropic provider adapter) --- none of that is a domain-layer gap,
+> which is what this document tracks.
+
 ## Domain Status
 
-  Domain          Status      Primary Document
-  --------------- ----------- ----------------------------------------
-  Tasks           `PARTIAL`   [`TASKS.md`](TASKS.md)
-  Execution       `PARTIAL`   [`EXECUTION.md`](EXECUTION.md)
-  Authorization   `PARTIAL`   [`AUTHORIZATION.md`](AUTHORIZATION.md)
-  Events          `PARTIAL`   [`EVENTS.md`](EVENTS.md)
-  Roles           `PARTIAL`   [`ROLES.md`](ROLES.md)
-  Actions         `PARTIAL`   [`ACTIONS.md`](ACTIONS.md)
-  Models          `PARTIAL`   [`MODELS.md`](MODELS.md)
-  Context         `PARTIAL`   [`CONTEXT.md`](CONTEXT.md)
-  Projects        `PARTIAL`   [`PROJECTS.md`](PROJECTS.md)
-  Capabilities    `PARTIAL`   [`CAPABILITIES.md`](CAPABILITIES.md)
-  Audit           `PARTIAL`   [`AUDIT.md`](AUDIT.md)
-  Metrics         `PARTIAL`   [`METRICS.md`](METRICS.md)
-  Suggestions     `PARTIAL`   [`SUGGESTIONS.md`](SUGGESTIONS.md)
-  Configuration   `PARTIAL`   [`CONFIGURATION.md`](CONFIGURATION.md)
+  Domain          Status         Primary Document
+  --------------- -------------- ----------------------------------------
+  Tasks           `IMPLEMENTED`  [`TASKS.md`](TASKS.md)
+  Execution       `IMPLEMENTED`  [`EXECUTION.md`](EXECUTION.md)
+  Authorization   `IMPLEMENTED`  [`AUTHORIZATION.md`](AUTHORIZATION.md)
+  Events          `IMPLEMENTED`  [`EVENTS.md`](EVENTS.md)
+  Roles           `IMPLEMENTED`  [`ROLES.md`](ROLES.md)
+  Actions         `IMPLEMENTED`  [`ACTIONS.md`](ACTIONS.md)
+  Models          `IMPLEMENTED`  [`MODELS.md`](MODELS.md)
+  Context         `IMPLEMENTED`  [`CONTEXT.md`](CONTEXT.md)
+  Projects        `IMPLEMENTED`  [`PROJECTS.md`](PROJECTS.md)
+  Capabilities    `IMPLEMENTED`  [`CAPABILITIES.md`](CAPABILITIES.md)
+  Audit           `IMPLEMENTED`  [`AUDIT.md`](AUDIT.md)
+  Metrics         `PARTIAL`      [`METRICS.md`](METRICS.md)
+  Suggestions     `IMPLEMENTED`  [`SUGGESTIONS.md`](SUGGESTIONS.md)
+  Configuration   `IMPLEMENTED`  [`CONFIGURATION.md`](CONFIGURATION.md)
+
+Metrics is the one domain kept at `PARTIAL` rather than matched to
+`docs/STATUS.md`'s combined "Audit and Metrics: `IMPLEMENTED`" row: its
+current contract (deriving per-execution `MetricRecord`s from
+authoritative events) is implemented and tested, but the domain
+document's own aggregation-oriented invariants have no aggregation
+query anywhere in the codebase yet (`MetricsRepository` only supports
+`add_many()` and a filtered `list()` of individual records). See
+`docs/TO-DO.md` Priority 3.
 
 ## Implementation State
 
@@ -34,13 +57,13 @@ Domain Contracts
     -> DEFINED
 
 Domain Code
-    -> IN_PROGRESS
+    -> IMPLEMENTED
 
 Domain Unit Tests
-    -> IN_PROGRESS
+    -> IMPLEMENTED
 
 Domain Integration
-    -> IN_PROGRESS
+    -> IMPLEMENTED (for the current operational scope)
 ```
 
 Implemented domain slices currently include task state transitions,
@@ -54,13 +77,22 @@ application boundary, and the provider-independent execution adapter
 boundary.
 
 Metrics and suggestions are implemented only for the first operational
-slice. Policy is runtime-enforced for the local flow and protected
-project operations, but is not yet a fully configurable engine. Audit is
-implemented for the initial event-derived history path. Project
-integration is limited to the filesystem adapter, and provider
-integration is limited to the initial execution port plus stub/Ollama
-adapters. Project security profiles and readiness gates are now
-implemented as a runtime-enforced domain/application slice with
+slice: metrics as per-execution derivation without aggregation (see
+above), suggestions as single-next-step recommendations from current
+task state without a broader recommendation engine. Policy is
+runtime-enforced for the local flow and protected project operations,
+but is not yet a fully configurable engine --- there is no CLI/API
+surface to configure `AutomaticExecutionPolicy` at runtime (tracked in
+`docs/TO-DO.md`). Audit is implemented for the initial event-derived
+history path. Project integration is limited to the filesystem
+adapter, and provider integration currently covers the
+provider-independent `AIProviderPort` plus three concrete adapters:
+`stub` (in-process, deterministic, for tests), `ollama` (real
+HTTP-backed local inference), and `openai` (real HTTP-backed cloud
+inference via the Responses API, covering OpenAI and Codex-capable
+models). An Anthropic/Claude adapter does not exist yet (also tracked
+in `docs/TO-DO.md`). Project security profiles and readiness gates are
+now implemented as a runtime-enforced domain/application slice with
 persisted effective and observed project state.
 
 ## Open Conceptual Areas

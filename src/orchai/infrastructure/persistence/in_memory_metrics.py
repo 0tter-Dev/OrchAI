@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from orchai.application.metrics import MetricsRepository
-from orchai.domain.identifiers import MetricRecordId, ProjectId, TaskId
+from orchai.domain.identifiers import ExecutionId, MetricRecordId, ProjectId, TaskId
 from orchai.domain.metrics import MetricRecord
 
 
@@ -22,6 +22,8 @@ class InMemoryMetricsRepository(MetricsRepository):
         *,
         task_id: TaskId | None = None,
         project_id: ProjectId | None = None,
+        execution_id: ExecutionId | None = None,
+        name: str | None = None,
         limit: int = 20,
     ) -> tuple[MetricRecord, ...]:
         records = tuple(
@@ -29,6 +31,8 @@ class InMemoryMetricsRepository(MetricsRepository):
             for record in self._records.values()
             if (task_id is None or record.task_id == task_id)
             and (project_id is None or record.project_id == project_id)
+            and (execution_id is None or record.execution_id == execution_id)
+            and (name is None or record.name == name)
         )
         return tuple(
             sorted(records, key=lambda record: record.observed_at, reverse=True)[:limit]

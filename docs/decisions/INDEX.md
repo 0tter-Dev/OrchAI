@@ -30,6 +30,12 @@ ADRs explain why important architectural choices were made.
 -   [`ADR-010-PROJECT-READINESS-AND-SECURITY-GATES.md`](ADR-010-PROJECT-READINESS-AND-SECURITY-GATES.md)
     --- Readiness and security gates for operations on connected
     projects.
+-   [`ADR-011-CHAT-FIRST-REQUEST-INTERFACE.md`](ADR-011-CHAT-FIRST-REQUEST-INTERFACE.md)
+    --- Chat-first `/requests` interface for external clients.
+-   [`ADR-012-AUTHENTICATION-AND-AUTHORIZATION.md`](ADR-012-AUTHENTICATION-AND-AUTHORIZATION.md)
+    --- Identity and access control (JWT authentication, persisted
+    users/permissions, superuser) for the CLI and API. Design only;
+    implementation is follow-up work.
 
 ## ADR Status Model
 

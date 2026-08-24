@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from pathlib import Path
 from typing import Final
 
@@ -185,7 +186,14 @@ class LocalFilesystemProjectAdapter(ProjectAdapter):
         args: tuple[str, ...] = (),
     ) -> ProjectCommandResult:
         self._require_capability(CapabilityName.RUN_TESTS)
-        return await self._execute_project_command(("pytest", *args))
+        try:
+            return await self._execute_project_command(("pytest", *args))
+        except ProjectCommandExecutionError as exc:
+            if "failed to execute project command: pytest" not in str(exc):
+                raise
+            return await self._execute_project_command(
+                (sys.executable, "-m", "pytest", *args)
+            )
 
     async def run_command(
         self,
@@ -200,7 +208,7 @@ class LocalFilesystemProjectAdapter(ProjectAdapter):
     ) -> ProjectCommandResult:
         if not command:
             raise ProjectCommandExecutionError("command must not be empty")
-        executable = command[0].lower()
+        executable = Path(command[0]).name.lower()
         if executable not in ALLOWED_PROJECT_COMMANDS:
             raise ProjectCommandExecutionError(
                 f"command is not allowed by the local adapter: {command[0]}"
@@ -333,7 +341,7 @@ SENSITIVE_RESOURCE_PATTERNS: Final[tuple[str, ...]] = (
 )
 
 ALLOWED_PROJECT_COMMANDS: Final[frozenset[str]] = frozenset(
-    {"pytest", "python", "uv"}
+    {"pytest", "python", "uv", Path(sys.executable).name.lower()}
 )
 
 

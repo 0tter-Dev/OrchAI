@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from orchai.application.events import EventRepository
-from orchai.domain.events import DomainEvent
-from orchai.domain.identifiers import EventId, ProjectId, TaskId
+from orchai.domain.events import DomainEvent, EventType
+from orchai.domain.identifiers import EventId, ExecutionId, ProjectId, TaskId
 
 
 class InMemoryEventRepository(EventRepository):
@@ -21,6 +21,8 @@ class InMemoryEventRepository(EventRepository):
         *,
         task_id: TaskId | None = None,
         project_id: ProjectId | None = None,
+        execution_id: ExecutionId | None = None,
+        event_type: EventType | None = None,
         limit: int = 20,
     ) -> tuple[DomainEvent, ...]:
         events = tuple(
@@ -28,6 +30,8 @@ class InMemoryEventRepository(EventRepository):
             for event in self._events.values()
             if (task_id is None or event.task_id == task_id)
             and (project_id is None or event.project_id == project_id)
+            and (execution_id is None or event.execution_id == execution_id)
+            and (event_type is None or event.event_type is event_type)
         )
         return tuple(
             sorted(events, key=lambda event: event.occurred_at, reverse=True)[:limit]

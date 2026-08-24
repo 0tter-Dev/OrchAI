@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from orchai.application.tasks.ports import TaskRepository
-from orchai.domain.identifiers import TaskId
-from orchai.domain.tasks import Task
+from orchai.domain.identifiers import ProjectId, TaskId
+from orchai.domain.tasks import Task, TaskState
 
 
 class TaskNotFoundError(LookupError):
@@ -31,6 +31,16 @@ class InMemoryTaskRepository(TaskRepository):
             raise TaskNotFoundError(str(task.id))
         self._tasks[task.id] = task
 
-    async def list(self) -> tuple[Task, ...]:
-        return tuple(self._tasks.values())
-
+    async def list(
+        self,
+        *,
+        project_id: ProjectId | None = None,
+        state: TaskState | None = None,
+        limit: int = 20,
+    ) -> tuple[Task, ...]:
+        tasks = tuple(reversed(tuple(self._tasks.values())))
+        if project_id is not None:
+            tasks = tuple(task for task in tasks if task.project_id == project_id)
+        if state is not None:
+            tasks = tuple(task for task in tasks if task.state is state)
+        return tasks[: max(limit, 1)]

@@ -80,6 +80,9 @@ class ProjectService:
     async def get_project(self, project_id: ProjectId) -> Project:
         return await self._repository.get(project_id)
 
+    async def get_project_by_root_location(self, root_location: str) -> Project | None:
+        return await self._repository.get_by_root_location(root_location)
+
     async def list_projects(self) -> tuple[Project, ...]:
         return await self._repository.list()
 

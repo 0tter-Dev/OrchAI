@@ -9,7 +9,7 @@ from typing import Protocol
 
 from orchai.domain.capabilities import CapabilityName
 from orchai.domain.context import ContextItem, ContextReference, ContextSource
-from orchai.domain.identifiers import ProjectId
+from orchai.domain.identifiers import ProjectId, UserId
 from orchai.domain.projects import (
     PersistenceClassification,
     Project,
@@ -105,6 +105,27 @@ class ProjectRepository(Protocol):
 
     async def list(self) -> tuple[Project, ...]:
         """Return persisted projects."""
+
+
+class ProjectConnectionRepository(Protocol):
+    """Tracks which users connected which projects (`docs/TO-DO.md` Priority 1).
+
+    A lightweight, informational reference only -- not an access-control
+    boundary. It exists so an admin view can show "who connected this
+    project" / "which projects has this user connected", nothing more;
+    no existing execution/action/permission check consults it, and it
+    does not restrict which projects a user can see or operate on. That
+    is the deliberately deferred broader per-user authorization refactor.
+    """
+
+    async def link(self, project_id: ProjectId, user_id: UserId) -> None:
+        """Record that `user_id` connected `project_id` (idempotent)."""
+
+    async def list_project_ids_for_user(self, user_id: UserId) -> tuple[ProjectId, ...]:
+        """Return the ids of projects `user_id` has connected."""
+
+    async def list_user_ids_for_project(self, project_id: ProjectId) -> tuple[UserId, ...]:
+        """Return the ids of users who have connected `project_id`."""
 
 
 class ProjectAdapter(Protocol):

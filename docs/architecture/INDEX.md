@@ -12,7 +12,7 @@ boundaries without becoming implementation code.
 
 -   [`../ARCHITECTURE.md`](../ARCHITECTURE.md) --- High-level
     architecture and implementation invariants.
--   [`../COMPONENTS.md`](../COMPONENTS.md) --- Logical component
+-   [`COMPONENTS.md`](COMPONENTS.md) --- Logical component
     responsibilities and physical mapping.
 -   [`TECHNOLOGY-STACK.md`](TECHNOLOGY-STACK.md) --- Accepted technology
     baseline.
@@ -31,6 +31,11 @@ boundaries without becoming implementation code.
     connected projects.
 -   [`API-UI-BOUNDARY.md`](API-UI-BOUNDARY.md) --- API, CLI, and future
     UI boundaries.
+-   [`CHAT-FIRST-REQUEST-MODEL.md`](CHAT-FIRST-REQUEST-MODEL.md) ---
+    Chat-first `/requests` projection over the Task domain.
+-   [`IDENTITY-AND-ACCESS-MODEL.md`](IDENTITY-AND-ACCESS-MODEL.md) ---
+    Users, permissions, and JWT authentication for the CLI and API
+    (design only; see ADR-012).
 -   [`CONFIGURATION-ARCHITECTURE.md`](CONFIGURATION-ARCHITECTURE.md) ---
     Configuration loading and resolution.
 -   [`TEST-STRATEGY.md`](TEST-STRATEGY.md) --- Testing layers and
