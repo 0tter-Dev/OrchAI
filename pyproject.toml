@@ -24,7 +24,7 @@ orchai = "orchai.interfaces.cli.main:app"
 dev = [
     "httpx2>=2.12",
     "pytest>=8.4",
-    "ruff==0.15.11",
+    "ruff==0.16.4",
 ]
 
 [build-system]
