@@ -67,7 +67,12 @@ scope control, documentation/naming rules, testing and CI/CD
 direction, and the selected technology baseline), and trims
 `ARCHITECTURE.md`/`IMPLEMENTATION-MAP.md` of the implementation-baseline
 sections it now owns, pointing to it and to the relevant
-`docs/context/*.md` files instead of restating them.
+`docs/context/*.md` files instead of restating them. `v0.2.7` folds
+`docs/VISION.md`'s product narrative into `ARCHITECTURAL-CONTRACT.md`
+§7 (deduplicated against `docs/context/modules-and-domain-structure.md`'s
+Forge/Studio definitions) and deletes `docs/VISION.md`,
+`CONTRIBUTING.md`, and `docs/engineering/DELIVERY-BASELINE.md`, both
+already fully superseded by `docs/GIT-GITHUB-FLOW.md`.
 
 The current AI-agent Git identity for automated pull requests is
 `0tter-Dev-AI`.
@@ -81,30 +86,7 @@ broad, split it into sequential steps before implementation starts.
 
 ## Next Implementation Roadmap
 
-1. `docs(architecture): fold VISION.md into ARCHITECTURAL-CONTRACT.md and retire the old delivery baseline`
-
-   Objective: remove the two remaining root documents superseded by
-   earlier steps.
-
-   Main scope: fold `docs/VISION.md`'s product narrative into
-   `ARCHITECTURAL-CONTRACT.md` as a new "Product Vision" subsection,
-   deduplicating its Forge/Studio description against
-   `docs/context/modules-and-domain-structure.md`; delete
-   `docs/VISION.md`, `CONTRIBUTING.md`, and
-   `docs/engineering/DELIVERY-BASELINE.md` (both already superseded by
-   `docs/GIT-GITHUB-FLOW.md`).
-
-   Likely documents to update: `docs/ARCHITECTURAL-CONTRACT.md`,
-   `docs/VISION.md` (removed), `CONTRIBUTING.md` (removed),
-   `docs/engineering/DELIVERY-BASELINE.md` (removed), `docs/INDEX.md`.
-
-   Expected validation: documentation diff review; grep for remaining
-   references to the removed files.
-
-   Planned semantic decision: patch bump from `0.2.6` to `0.2.7`, because
-   this retires governance documents still linked from elsewhere.
-
-2. `docs(user-guide): merge the onboarding and operations guides`
+1. `docs(user-guide): merge the onboarding and operations guides`
 
    Objective: replace two overlapping user documents with a walkthrough
    plus a reference, matching the OrchFlow split.
@@ -128,7 +110,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.7` to `0.2.8`, because
    this changes documented user-facing setup guidance.
 
-3. `docs(index): rewrite INDEX.md as the single navigation hub`
+2. `docs(index): rewrite INDEX.md as the single navigation hub`
 
     Objective: give the now-final documentation set one authoritative
     entry point.
@@ -146,7 +128,7 @@ broad, split it into sequential steps before implementation starts.
     Planned semantic decision: no version bump; pure navigation, no
     documented behavior or governance change.
 
-4. `docs(agents): restructure AGENTS.md`
+3. `docs(agents): restructure AGENTS.md`
 
     Objective: align OrchAI's agent rulebook with the finished
     documentation model.

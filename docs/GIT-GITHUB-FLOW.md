@@ -398,7 +398,7 @@ Recommended labels:
 
 ## Current Adoption State
 
-As of `2026-09-06`, this document establishes the Git and GitHub delivery flow for OrchAI, replacing `CONTRIBUTING.md` and `docs/engineering/DELIVERY-BASELINE.md` as the source of truth for delivery process. Those two documents remain in place until the root documentation consolidation step retires them.
+As of `2026-09-06`, this document establishes the Git and GitHub delivery flow for OrchAI, replacing `CONTRIBUTING.md` and `docs/engineering/DELIVERY-BASELINE.md` as the source of truth for delivery process. Both of those documents were deleted once the root documentation consolidation step retired them.
 
 The repository should continue evolving with:
 

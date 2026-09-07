@@ -10,7 +10,7 @@ business logic in the core.
 
 ## Current Status
 
-Version: `v0.2.6`
+Version: `v0.2.7`
 
 The current implementation is an executable foundation, not a complete
 product.
@@ -152,8 +152,7 @@ GET /providers/health
 
 - [User onboarding guide](docs/USER-ONBOARDING.md)
 - [User operations guide](docs/USER-OPERATIONS-GUIDE.md)
-- [Contributing guide](CONTRIBUTING.md)
-- [Delivery baseline](docs/engineering/DELIVERY-BASELINE.md)
+- [Git and GitHub delivery flow](docs/GIT-GITHUB-FLOW.md)
 - [Documentation index](docs/INDEX.md)
 
 ## CLI
