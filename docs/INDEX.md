@@ -28,8 +28,6 @@ provide a stable entry point for humans and AI agents.
 
 -   [`architecture/INDEX.md`](architecture/INDEX.md) --- Architecture
     documentation navigation.
--   [`architecture/STATUS.md`](architecture/STATUS.md) --- Current
-    architecture-definition status.
 -   [`architecture/PROJECT-SECURITY-AND-READINESS.md`](architecture/PROJECT-SECURITY-AND-READINESS.md)
     --- Security, trust, and readiness rules for connected projects.
 
@@ -37,8 +35,6 @@ provide a stable entry point for humans and AI agents.
 
 -   [`domains/INDEX.md`](domains/INDEX.md) --- Domain documentation
     navigation.
--   [`domains/STATUS.md`](domains/STATUS.md) --- Current
-    domain-definition and implementation status.
 
 ### Architecture Decisions
 
@@ -95,6 +91,13 @@ When investigating a topic:
 
 ## Status Authority
 
-The root [`STATUS.md`](STATUS.md) describes the overall project state.
+The root [`STATUS.md`](STATUS.md) is the single, sole status document
+for the project — it describes overall project state as a pure
+snapshot. No other document tracks status; there is nothing left to
+diverge from it.
 
-Section-specific status documents describe only their own scope.
+For how the project reached its current state, see
+[`HISTORY.md`](HISTORY.md), a one-time, frozen archive that is never
+extended. Going forward, what changed release-over-release is covered
+by generated release notes (`scripts/release.py`), not a document like
+this one.
