@@ -22,19 +22,6 @@ boundaries without becoming implementation code.
     Domain module organization.
 -   [`PERSISTENCE-STRATEGY.md`](PERSISTENCE-STRATEGY.md) --- Persistence
     boundaries and ownership.
--   [`ADAPTER-CONTRACTS.md`](ADAPTER-CONTRACTS.md) --- AI and Project
-    Adapter boundaries.
--   [`PROJECT-SECURITY-AND-READINESS.md`](PROJECT-SECURITY-AND-READINESS.md)
-    --- Security profile, readiness levels, and operational gates for
-    connected projects.
--   [`API-UI-BOUNDARY.md`](API-UI-BOUNDARY.md) --- API, CLI, and future
-    UI boundaries.
--   [`CHAT-FIRST-REQUEST-MODEL.md`](CHAT-FIRST-REQUEST-MODEL.md) ---
-    Chat-first `/requests` projection over the Task domain.
--   [`IDENTITY-AND-ACCESS-MODEL.md`](IDENTITY-AND-ACCESS-MODEL.md) ---
-    Users, permissions, and JWT authentication for the CLI and API
-    (implemented; see ADR-012). For the desktop client's single-user
-    simplification, see ADR-016.
 -   [`CONFIGURATION-ARCHITECTURE.md`](CONFIGURATION-ARCHITECTURE.md) ---
     Configuration loading and resolution.
 -   [`TEST-STRATEGY.md`](TEST-STRATEGY.md) --- Testing layers and
@@ -46,10 +33,18 @@ boundaries without becoming implementation code.
 -   [`DESKTOP-APPLICATION.md`](DESKTOP-APPLICATION.md) --- The OrchAI
     Desktop client shell introduced by ADR-017.
 
-Event dispatch and messaging strategy has moved to
-[`../context/events-and-state.md`](../context/events-and-state.md), as
-part of the OrchFlow-inspired documentation consolidation (see
-`docs/TO-DO.md`).
+Event dispatch/messaging strategy, the AI and Project Adapter
+contracts, project security/readiness, the API/UI boundary, the
+chat-first request model, and identity/access have all moved to
+`docs/context/` as part of the OrchFlow-inspired documentation
+consolidation (see `docs/TO-DO.md`):
+[`../context/events-and-state.md`](../context/events-and-state.md),
+[`../context/execution-engine.md`](../context/execution-engine.md)
+(AI Provider Adapter),
+[`../context/project-adapter-and-security.md`](../context/project-adapter-and-security.md),
+[`../context/chat-first-and-interfaces.md`](../context/chat-first-and-interfaces.md),
+and
+[`../context/identity-and-access.md`](../context/identity-and-access.md).
 
 ## Architectural Flow
 

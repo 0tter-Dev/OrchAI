@@ -28,8 +28,6 @@ provide a stable entry point for humans and AI agents.
 
 -   [`architecture/INDEX.md`](architecture/INDEX.md) --- Architecture
     documentation navigation.
--   [`architecture/PROJECT-SECURITY-AND-READINESS.md`](architecture/PROJECT-SECURITY-AND-READINESS.md)
-    --- Security, trust, and readiness rules for connected projects.
 
 ### Domains
 
@@ -52,6 +50,19 @@ and `docs/domains/` into one file per bounded concept (see
 -   [`context/events-and-state.md`](context/events-and-state.md) ---
     Event contract, dispatch strategy, and the State Machine
     relationship.
+-   [`context/authorization-policy.md`](context/authorization-policy.md)
+    --- Authorization concepts and the MANUAL/SUGGESTED/AUTOMATIC
+    execution modes.
+-   [`context/identity-and-access.md`](context/identity-and-access.md)
+    --- Users, access roles, permissions, and JWT authentication.
+-   [`context/project-adapter-and-security.md`](context/project-adapter-and-security.md)
+    --- Project Adapter boundary, security profile, and the LEVEL_0-3
+    readiness gates.
+-   [`context/context-management.md`](context/context-management.md)
+    --- Context lifecycle and authorization for AI execution.
+-   [`context/chat-first-and-interfaces.md`](context/chat-first-and-interfaces.md)
+    --- The `/requests` chat-first projection and the CLI/API/UI
+    boundary.
 
 ### Architecture Decisions
 
@@ -71,8 +82,9 @@ and `docs/domains/` into one file per bounded concept (see
     posture, and real-project usage.
 -   [`engineering/DELIVERY-BASELINE.md`](engineering/DELIVERY-BASELINE.md)
     --- Initial Git/GitHub/CI baseline for safe incremental delivery.
--   [`domains/AUTHORIZATION.md`](domains/AUTHORIZATION.md) --- Detailed
-    explanation of policy, authorization, and execution boundaries.
+-   [`context/authorization-policy.md`](context/authorization-policy.md)
+    --- Detailed explanation of policy, authorization, and execution
+    boundaries.
 -   [`architecture/CONFIGURATION-ARCHITECTURE.md`](architecture/CONFIGURATION-ARCHITECTURE.md)
     --- Effective configuration model, precedence, and runtime surface.
 
