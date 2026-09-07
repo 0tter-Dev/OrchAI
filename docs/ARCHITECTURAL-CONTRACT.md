@@ -535,3 +535,54 @@ architectural decision before the implementation changes the established
 contract.
 
 ------------------------------------------------------------------------
+
+## 6. Foundational Decisions
+
+This section records the decision statements from OrchAI's former
+Architecture Decision Records (ADRs) that are cross-cutting enough to
+belong in the contract itself, now that the ADR format is retired as
+the active decision-record mechanism in favor of this document and
+`docs/context/*.md` (see `docs/TO-DO.md`). Full rationale,
+consequences, and historical amendments for each remain in
+`docs/archive/decisions/`; only the decision itself is restated here.
+
+### 6.1 Local/Cloud Provider Boundary (formerly ADR-005)
+
+All AI resources are accessed through the AI Provider Adapter
+boundary; the execution model distinguishes `LOCAL`/`CLOUD`/`EXTERNAL
+AGENT`, and provider SDKs remain infrastructure dependencies. See
+Principle 2.11 for the interoperability rule this decision
+established, and
+`docs/archive/decisions/ADR-005-LOCAL-CLOUD-PROVIDER-BOUNDARY.md` for
+the full record.
+
+### 6.2 Suggested As Default Execution Mode (formerly ADR-006)
+
+`SUGGESTED` is the default execution mode; `MANUAL` and `AUTOMATIC`
+remain explicit alternatives. This is the same decision already
+stated as Principle 2.2 — recorded here only as a cross-reference, not
+restated. See
+`docs/archive/decisions/ADR-006-SUGGESTED-AS-DEFAULT-EXECUTION-MODE.md`.
+
+### 6.3 Modular Monolith Architecture (formerly ADR-007)
+
+OrchAI is implemented as a modular monolith using Clean/Hexagonal
+Architecture principles (`domain/`, `application/`, `infrastructure/`,
+`interfaces/`, `bootstrap/`), with logical modules independently
+bounded inside one deployable application — never independent
+processes or microservices unless a future decision explicitly
+introduces service decomposition. See
+`docs/context/modules-and-domain-structure.md` for the physical
+structure, and `docs/archive/decisions/ADR-007-MODULAR-MONOLITH.md`
+for the full record.
+
+### 6.4 External Project Content Ownership (formerly ADR-009)
+
+Connected projects remain the authoritative owners of their content;
+OrchAI accesses project resources only through Project Adapter
+implementations and does not mirror complete project content by
+default. This is the same decision already stated as Principle 2.6
+(Project Isolation) — recorded here only as a cross-reference. See
+`docs/archive/decisions/ADR-009-PROJECT-CONTENT-OWNERSHIP.md`.
+
+------------------------------------------------------------------------

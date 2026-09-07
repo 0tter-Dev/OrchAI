@@ -93,6 +93,10 @@ Suggestions, Audit Records, Metrics, Configuration. The concrete
 implementation is intentionally unspecified at the domain level. Maps
 to `infrastructure/persistence/`.
 
+This document folds in the still-relevant decision from the former
+ADR-002 (Persistence Strategy) — the SQLAlchemy/PostgreSQL/SQLite
+strategy above; full rationale remains in `docs/archive/decisions/`.
+
 ## Key Rules
 
 - domain models never depend on database technology

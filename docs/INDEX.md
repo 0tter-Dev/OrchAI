@@ -65,10 +65,16 @@ and `docs/domains/` directories into one file per bounded concept (see
 -   [`context/deployment-and-desktop.md`](context/deployment-and-desktop.md)
     --- Headless and desktop deployment shapes.
 
-### Architecture Decisions
+### Archived Decisions
 
--   [`decisions/INDEX.md`](decisions/INDEX.md) --- Architecture Decision
-    Record navigation.
+The ADR format is retired as the active decision-record mechanism.
+Still-relevant decisions now live in
+[`ARCHITECTURAL-CONTRACT.md`](ARCHITECTURAL-CONTRACT.md) §6
+(cross-cutting) or the matching `docs/context/*.md` file's "Key Rules"
+section (single-domain) above.
+
+-   [`archive/decisions/INDEX.md`](archive/decisions/INDEX.md) --- All
+    17 ADRs, preserved verbatim for historical record.
 
 ### Repository Guidance
 
@@ -97,8 +103,6 @@ ARCHITECTURAL CONTRACT
 ARCHITECTURE
         ↓
 CONTEXT DOCUMENTATION
-        ↓
-DECISIONS
         ↓
 IMPLEMENTATION MAP
         ↓

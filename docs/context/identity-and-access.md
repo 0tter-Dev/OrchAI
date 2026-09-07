@@ -405,6 +405,27 @@ a brand-new surface with zero pre-existing callers.
 `email`; it has no `access_roles`/`is_superuser`/`id` field, so a user
 can never elevate or reassign their own access through self-service.
 
+## Desktop Single-User Identity
+
+The OrchAI Desktop shell (see `Deployment And Desktop`) reuses this
+IAM implementation for **attribution only**, never access control:
+`ORCHAI_AUTH_ENFORCED` stays at its default `false`, and a dedicated
+FastAPI dependency, `require_desktop_local_user()` — distinct from
+both `require_permission()` (inert when unenforced) and
+`require_authenticated_user()` (always requires a real bearer token)
+— always resolves to the single local superuser provisioned on first
+launch, without checking any token. This exists purely so
+`requester`/`decided_by` fields on Task/Authorization/Audit records
+carry a real, consistent identity instead of a hardcoded literal; it
+never starts the broader per-user authorization revisit described in
+`docs/TO-DO.md`.
+
+This document folds in the still-relevant decisions from the former
+ADR-012 (Authentication and Access Control for the CLI and API — the
+whole of this document) and ADR-016 (Single Local User Identity for
+OrchAI Desktop — the section above); full rationale for each remains
+in `docs/archive/decisions/`.
+
 ## Key Rules
 
 - `Authorization`, `RoleName`, and `Execution` keep their pre-existing, unrelated meanings — `AccessRole`/`AccessRoleId` is used throughout, never bare `Role`/`RoleId`
@@ -414,6 +435,7 @@ can never elevate or reassign their own access through self-service.
 - `/me` always resolves a real caller regardless of `ORCHAI_AUTH_ENFORCED`; every other route's permission check is inert when the flag is off
 - `project_connections` is descriptive metadata, never an access-control boundary
 - flipping `ORCHAI_AUTH_ENFORCED` to `true` by default is a deployment decision that has not been made
+- the desktop shell never sets `ORCHAI_AUTH_ENFORCED=true` and never adds a login screen, password prompt, or credential storage
 
 ## Main Relationships
 

@@ -1,5 +1,8 @@
 # OrchAI --- Architecture Decision Records
 
+> **Archived.** See [`INDEX.md`](INDEX.md) for why this format was
+> retired and where each decision's still-relevant content now lives.
+
 ## Purpose
 
 Decision records document implementation choices that materially affect

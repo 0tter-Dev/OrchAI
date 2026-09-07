@@ -121,6 +121,10 @@ contracts. Persistent data (database, configuration, audit, events,
 execution records, provider metadata) must be separated from the
 application image, and secrets use external secret configuration.
 
+This document folds in the still-relevant decision from the former
+ADR-017 (Desktop Application Shell) — the Desktop Deployment section
+above; full rationale remains in `docs/archive/decisions/`.
+
 ## Key Rules
 
 - the desktop shell binds only to `127.0.0.1`; it is never exposed to the network

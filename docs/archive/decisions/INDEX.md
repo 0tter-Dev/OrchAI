@@ -1,5 +1,15 @@
 # OrchAI Architecture Decision Index
 
+> **Archived.** The ADR format is retired as OrchAI's active
+> decision-record mechanism, superseded by inline documentation in
+> [`../../ARCHITECTURAL-CONTRACT.md`](../../ARCHITECTURAL-CONTRACT.md)
+> (cross-cutting decisions) and the relevant
+> [`docs/context/*.md`](../../context/) file's "Key Rules" section
+> (single-domain decisions). Every ADR below is preserved verbatim for
+> historical record; none is updated further. See `docs/TO-DO.md` for
+> the retirement decision and the per-ADR mapping to its live landing
+> spot.
+
 ## Purpose
 
 This document provides navigation for Architecture Decision Records

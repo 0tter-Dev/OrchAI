@@ -223,6 +223,10 @@ processing, traceability of what left the project boundary, and clear
 separation between orchestration history and project-owned
 intellectual property.
 
+This document folds in the still-relevant decision from the former
+ADR-010 (Project Readiness and Security Gates) — the LEVEL_0-3 model
+above; full rationale remains in `docs/archive/decisions/`.
+
 ## Key Rules
 
 - any project may be connected, even if not yet ready for tracked modification or automation

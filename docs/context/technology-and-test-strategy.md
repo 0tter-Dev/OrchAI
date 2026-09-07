@@ -98,6 +98,11 @@ UNIT → CONTRACT → INTEGRATION → END-TO-END
 A bug involving a domain invariant normally produces a regression test
 alongside its fix.
 
+This document folds in the still-relevant decision from the former
+ADR-001 (Initial Technology Stack) — the baseline above and the
+explicit non-goals it originally set, most of which still hold; full
+rationale remains in `docs/archive/decisions/`.
+
 ## Key Rules
 
 - domain code never imports FastAPI, Typer, SQLAlchemy, HTTPX, provider SDKs, or concrete infrastructure
