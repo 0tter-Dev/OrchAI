@@ -10,7 +10,7 @@ business logic in the core.
 
 ## Current Status
 
-Version: `v0.2.3`
+Version: `v0.2.4`
 
 The current implementation is an executable foundation, not a complete
 product.
@@ -31,7 +31,7 @@ default) are all covered by the CLI and the HTTP API, with the
 `/requests` chat-first surface (ADR-011) as the primary integration
 point. Identity and access management (JWT authentication, persisted
 users/permissions, a superuser role), documented in ADR-012 and
-[docs/architecture/IDENTITY-AND-ACCESS-MODEL.md](docs/architecture/IDENTITY-AND-ACCESS-MODEL.md),
+[docs/context/identity-and-access.md](docs/context/identity-and-access.md),
 is now implemented end to end — `POST /auth/login` / `POST /auth/refresh`
 / `POST /auth/logout`, `orchai auth login` / `orchai auth logout` /
 `orchai auth bootstrap-admin`, a permission check on every other
@@ -324,8 +324,8 @@ Start with [docs/INDEX.md](docs/INDEX.md) for the documentation map.
 Important architectural boundaries are captured in:
 
 - [docs/ARCHITECTURAL-CONTRACT.md](docs/ARCHITECTURAL-CONTRACT.md)
-- [docs/architecture/APPLICATION-STRUCTURE.md](docs/architecture/APPLICATION-STRUCTURE.md)
-- [docs/architecture/PERSISTENCE-STRATEGY.md](docs/architecture/PERSISTENCE-STRATEGY.md)
+- [docs/context/modules-and-domain-structure.md](docs/context/modules-and-domain-structure.md)
+- [docs/context/persistence.md](docs/context/persistence.md)
 - [docs/IMPLEMENTATION-MAP.md](docs/IMPLEMENTATION-MAP.md)
 
 ## License

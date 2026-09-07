@@ -766,8 +766,7 @@ infrastructure implements external contracts, interfaces translate
 external requests, and bootstrap assembles the runtime.
 
 The detailed module mapping is defined in
-`docs/architecture/APPLICATION-STRUCTURE.md` and
-`docs/architecture/DOMAIN-MODULE-STRUCTURE.md`.
+`docs/context/modules-and-domain-structure.md`.
 
 ## 24. Project Content Boundary
 

@@ -50,7 +50,8 @@ coexist as distinct experiences on the same foundation:
 The module boundary is deliberately open-ended: the architecture is
 built so a third, fourth, or later module can be added without
 redesigning the orchestration core underneath it. See
-`docs/architecture/MODULES.md` for how a module is defined and added.
+`docs/context/modules-and-domain-structure.md` for how a module is
+defined and added.
 
 ## Why This Direction
 
@@ -64,10 +65,10 @@ engine rather than as its entire product.
 
 ## Where To Go Next
 
-- `docs/architecture/DESKTOP-APPLICATION.md` --- how the desktop shell
+- `docs/context/deployment-and-desktop.md` --- how the desktop shell
   is built and phased.
-- `docs/architecture/MODULES.md` --- how Forge, Studio, and future
-  modules are defined.
+- `docs/context/modules-and-domain-structure.md` --- how Forge,
+  Studio, and future modules are defined.
 - `docs/decisions/INDEX.md` --- the ADRs recording why each major choice
   (LiteLLM, conversations, modules, single-user identity, the desktop
   shell itself) was made.
