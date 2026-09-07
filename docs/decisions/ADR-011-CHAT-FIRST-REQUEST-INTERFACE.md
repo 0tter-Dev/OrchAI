@@ -193,6 +193,45 @@ passthrough fields as `/advance` (`context_paths`, `documentation_path`,
 `test_args`, `model`, `provider_target`), needed only when the currently
 blocked stage itself requires them (e.g. PLAN requires `context_paths`).
 
+## Amendment (OrchAI Desktop Phase 5)
+
+Verifying Forge's Approval Card (`docs/decisions/ADR-014-CONVERSATION-DOMAIN-MODEL.md`,
+`docs/architecture/DESKTOP-APPLICATION.md` Phase 5) end-to-end surfaced a
+bug in the mechanism the previous amendment (v0.1.6) relies on:
+`Orchestrator._resolve_task_stage()` (`application/orchestration/orchestrator.py`)
+called `SuggestionEngine.suggest_next()` unconditionally on every
+`/advance`/`/approve` call that did not pass an explicit `stage` --
+exactly what `/approve`'s internal delegation to `run_task_workflow_stage`
+does. Each call generated a brand-new `Suggestion` record for the task's
+current state without marking the *previous* `PRESENTED` one as
+resolved, so multiple suggestion records could exist for the same
+task/stage: one left permanently `PRESENTED` (the original), and a
+newer one actually carried through to `ACCEPTED`. Since
+`_serialize_request_flow`'s `pending_suggestion` selection
+(`max(... key=generated_at)`) only filters by `status is PRESENTED`, the
+stale original could still win that selection after the newer one was
+already accepted and the stage completed -- so `GET /requests/{id}/flow`
+could keep reporting `suggestion.status: "PRESENTED"` and
+`status: "PENDING_SUGGESTION"` indefinitely after a stage the user had
+already approved and that had already executed.
+
+This was invisible before Phase 5 because no prior caller kept
+persistently re-rendering "is this still awaiting approval?" from
+these fields across multiple fetches -- CLI/API consumers read a single
+response and moved on. Fixed in `SuggestionEngine.suggest_next()`
+(`application/suggestions/engine.py`): it now checks for an existing
+`PRESENTED` suggestion matching the *same* `(suggested_role,
+suggested_action)` the current task state would produce, and reuses it
+instead of creating a duplicate; a stale `PRESENTED` suggestion left
+over for a *different* stage (e.g. one bypassed via a direct
+`POST /tasks/{id}/transition`) is correctly ignored and a fresh one is
+generated instead. This keeps invariant #3 (`approve` records an
+explicit decision, never bypasses authorization) intact and requires no
+change to `SuggestionStatus`, `_serialize_request_flow`, or any call
+site -- the fix is confined to `SuggestionEngine`, which every caller
+already routes through. See `tests/unit/application/test_suggestion_engine.py`
+for the regression coverage.
+
 ## Supersedes
 
 None. Extends ADR-004 (API-First Interface Boundary) without superseding

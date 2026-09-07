@@ -35,13 +35,18 @@ boundaries without becoming implementation code.
     Chat-first `/requests` projection over the Task domain.
 -   [`IDENTITY-AND-ACCESS-MODEL.md`](IDENTITY-AND-ACCESS-MODEL.md) ---
     Users, permissions, and JWT authentication for the CLI and API
-    (design only; see ADR-012).
+    (implemented; see ADR-012). For the desktop client's single-user
+    simplification, see ADR-016.
 -   [`CONFIGURATION-ARCHITECTURE.md`](CONFIGURATION-ARCHITECTURE.md) ---
     Configuration loading and resolution.
 -   [`TEST-STRATEGY.md`](TEST-STRATEGY.md) --- Testing layers and
     responsibilities.
 -   [`DEPLOYMENT-MODEL.md`](DEPLOYMENT-MODEL.md) --- Initial and future
     deployment topology.
+-   [`MODULES.md`](MODULES.md) --- The Module concept (Forge, Studio,
+    and future modules) introduced by ADR-015.
+-   [`DESKTOP-APPLICATION.md`](DESKTOP-APPLICATION.md) --- The OrchAI
+    Desktop client shell introduced by ADR-017.
 
 ## Architectural Flow
 

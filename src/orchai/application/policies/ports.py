@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from orchai.domain.actions import ActionName
 from orchai.domain.projects import (
@@ -16,6 +16,9 @@ from orchai.domain.projects import (
 )
 from orchai.domain.roles import RoleName
 from orchai.domain.tasks import ExecutionMode, TaskState
+
+if TYPE_CHECKING:
+    from orchai.application.policies.service import AutomaticExecutionPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,3 +63,20 @@ class PolicyPort(Protocol):
 
     async def evaluate(self, operation: PolicyOperation) -> PolicyDecision:
         """Return whether an operation is allowed to proceed."""
+
+
+class AutomaticPolicyRepository(Protocol):
+    """Durable storage for the single, runtime-mutable automatic-mode policy.
+
+    Unlike every other repository in this codebase, this one always holds
+    exactly one logical record (a global configuration singleton, not a
+    collection of aggregates) -- `get()` must never raise for a missing
+    row, returning the conservative default instead, so a fresh database
+    behaves identically to one that has never had `set()` called on it.
+    """
+
+    async def get(self) -> AutomaticExecutionPolicy:
+        """Return the current automatic-mode policy, or the default."""
+
+    async def set(self, policy: AutomaticExecutionPolicy) -> None:
+        """Persist a new automatic-mode policy, replacing the current one."""

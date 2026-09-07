@@ -199,6 +199,92 @@ def test_policy_blocks_source_write_without_minimum_readiness() -> None:
     asyncio.run(run())
 
 
+def test_policy_evaluate_rereads_repository_on_every_call() -> None:
+    """The repository-backed policy must be runtime-mutable: a change made
+    between two `evaluate()` calls (e.g. via `PUT /policies/automatic`)
+    takes effect immediately, without reconstructing the service."""
+
+    class _MutableRepository:
+        def __init__(self, policy: AutomaticExecutionPolicy) -> None:
+            self._policy = policy
+
+        async def get(self) -> AutomaticExecutionPolicy:
+            return self._policy
+
+        async def set(self, policy: AutomaticExecutionPolicy) -> None:
+            self._policy = policy
+
+    async def run() -> None:
+        repository = _MutableRepository(AutomaticExecutionPolicy(allowed_operations=()))
+        service = LocalPolicyService(automatic_policy_repository=repository)
+        operation = PolicyOperation(
+            execution_mode=ExecutionMode.AUTOMATIC,
+            role=RoleName.DEVELOPER,
+            action=ActionName.IMPLEMENT,
+            requested_model="m1",
+            effective_model="m1",
+            requested_context=("src/app.py",),
+            authorized_context=("src/app.py",),
+            current_task_state=TaskState.PLANNED,
+            project_operation=ProjectOperation.WRITE_SOURCE,
+            project_readiness_level=ProjectReadinessLevel.LEVEL_1_CHANGEABLE,
+        )
+
+        denied = await service.evaluate(operation)
+        assert denied.allowed is False
+        assert denied.reason == "automatic_policy_denied"
+
+        await repository.set(
+            AutomaticExecutionPolicy(
+                allowed_operations=((RoleName.DEVELOPER, ActionName.IMPLEMENT),)
+            )
+        )
+
+        allowed = await service.evaluate(operation)
+        assert allowed.allowed is True
+        assert allowed.reason == "automatic_policy_allowed"
+
+    asyncio.run(run())
+
+
+def test_policy_static_automatic_policy_takes_precedence_over_repository() -> None:
+    """A caller-supplied static `automatic_policy` (e.g. a per-call override
+    in `Orchestrator`) must win over a repository, matching the pre-existing
+    behavior for any caller that never passes a repository at all."""
+
+    class _RepositoryThatShouldNeverBeRead:
+        async def get(self) -> AutomaticExecutionPolicy:
+            raise AssertionError("repository should not be consulted")
+
+        async def set(self, policy: AutomaticExecutionPolicy) -> None:
+            raise AssertionError("repository should not be consulted")
+
+    async def run() -> None:
+        service = LocalPolicyService(
+            automatic_policy=AutomaticExecutionPolicy(
+                allowed_operations=((RoleName.DEVELOPER, ActionName.IMPLEMENT),)
+            ),
+            automatic_policy_repository=_RepositoryThatShouldNeverBeRead(),
+        )
+        decision = await service.evaluate(
+            PolicyOperation(
+                execution_mode=ExecutionMode.AUTOMATIC,
+                role=RoleName.DEVELOPER,
+                action=ActionName.IMPLEMENT,
+                requested_model="m1",
+                effective_model="m1",
+                requested_context=("src/app.py",),
+                authorized_context=("src/app.py",),
+                current_task_state=TaskState.PLANNED,
+                project_operation=ProjectOperation.WRITE_SOURCE,
+                project_readiness_level=ProjectReadinessLevel.LEVEL_1_CHANGEABLE,
+            )
+        )
+        assert decision.allowed is True
+
+    asyncio.run(run())
+
+
 def test_policy_blocks_cloud_provider_when_project_forbids_sharing() -> None:
     async def run() -> None:
         service = LocalPolicyService()

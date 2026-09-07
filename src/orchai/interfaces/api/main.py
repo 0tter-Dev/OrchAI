@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import os
+from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from orchai.application.authorization import (
@@ -14,6 +19,11 @@ from orchai.application.authorization import (
     RequestAuthorizationCommand,
 )
 from orchai.application.context import ResolveExecutionContextCommand
+from orchai.application.conversations import (
+    CreateConversationCommand,
+    SendMessageCommand,
+    UnknownModuleError,
+)
 from orchai.application.executions import (
     CompleteExecutionCommand,
     RequestExecutionCommand,
@@ -31,19 +41,21 @@ from orchai.application.identity import (
     SetPermissionsForRoleCommand,
     UpdateUserProfileCommand,
 )
+from orchai.application.modules import get_module, list_modules
 from orchai.application.orchestration import (
     TaskWorkflowStage,
     run_local_flow,
     run_project_operation,
     run_task_workflow_stage,
 )
-from orchai.application.policies import PolicyOperation
+from orchai.application.policies import AutomaticExecutionPolicy, PolicyOperation
 from orchai.application.projects import (
     RegisterProjectCommand,
     UpdateProjectSecurityCommand,
 )
 from orchai.application.tasks import CreateTaskCommand, TransitionTaskCommand
 from orchai.bootstrap import (
+    build_conversation_runtime_from_settings,
     build_identity_runtime_from_settings,
     build_local_flow_dependencies_from_settings,
     build_sqlalchemy_runtime,
@@ -64,8 +76,10 @@ from orchai.domain.identifiers import (
     AccessRoleId,
     AuditRecordId,
     AuthorizationId,
+    ConversationId,
     ExecutionId,
     ModelId,
+    ModuleId,
     PermissionId,
     ProjectId,
     SuggestionId,
@@ -101,12 +115,17 @@ from orchai.infrastructure.persistence import (
     SQLAlchemyProjectConnectionRepository,
 )
 from orchai.infrastructure.persistence.db import DatabaseAdmin
-from orchai.infrastructure.projects import LocalFilesystemProjectAdapter
+from orchai.infrastructure.projects import (
+    LocalFilesystemProjectAdapter,
+    MediaWorkspaceProjectAdapter,
+)
 
 _API_TAGS_METADATA = [
     {"name": "requests", "description": "Chat-first request interface — primary entry point for external clients."},
     {"name": "system", "description": "Service health, runtime posture, and API metadata."},
     {"name": "providers", "description": "AI provider configuration, capabilities, and health."},
+    {"name": "modules", "description": "Module registry (Forge, Studio, ...) — ADR-015."},
+    {"name": "conversations", "description": "Persistent chat conversations and messages — ADR-014."},
     {"name": "auth", "description": "Authentication (login/refresh/logout) — ADR-012."},
     {"name": "admin", "description": "Admin-only user/access-role/project configuration CRUD."},
     {"name": "me", "description": "Self-service: the logged-in user's own profile and projects."},
@@ -298,6 +317,41 @@ class ProjectRegisterRequest(BaseModel):
     database_url: str | None = None
 
 
+class ConversationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    module_id: str
+    project_id: str | None = None
+    title: str = ""
+    database_url: str | None = None
+
+
+class ConversationMessageCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    content: str
+    model: str | None = None
+    database_url: str | None = None
+
+
+class ConversationEscalateRequest(BaseModel):
+    """Escalate a conversation message into a real Task (ADR-014 §2, Phase 5).
+
+    Mirrors `ChatRequest` (`POST /requests`) minus `project_root` --
+    resolved instead from the conversation's own `project_id`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str
+    model: str | None = None
+    execution_mode: ExecutionMode = ExecutionMode.SUGGESTED
+    provider_target: ProviderTarget = ProviderTarget.LOCAL
+    context_paths: list[str] = Field(default_factory=list)
+    approve_suggestion: bool = False
+    database_url: str | None = None
+
+
 class AuthorizationRequestCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -385,6 +439,32 @@ class PolicyEvaluateRequest(BaseModel):
     database_url: str | None = None
 
 
+class AutomaticPolicyOperationEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: RoleName
+    action: ActionName
+
+
+class AutomaticPolicyTransitionEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    previous_role: RoleName
+    next_role: RoleName
+
+
+class AutomaticPolicySetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_operations: list[AutomaticPolicyOperationEntry] = Field(default_factory=list)
+    allowed_cross_role_transitions: list[AutomaticPolicyTransitionEntry] = Field(
+        default_factory=list
+    )
+    allow_model_substitution: bool = False
+    allow_context_expansion: bool = False
+    database_url: str | None = None
+
+
 class ExecutionRequestCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -403,6 +483,12 @@ class ExecutionTransitionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     target_state: ExecutionState
+    database_url: str | None = None
+
+
+class ExecutionCancelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     database_url: str | None = None
 
 
@@ -593,7 +679,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="OrchAI API",
-        version="0.1.11",
+        version="0.2.0",
         summary="OrchAI orchestration API — chat-first request interface and operational surface.",
         description=(
             "API-first interface for OrchAI orchestration. "
@@ -609,7 +695,7 @@ def create_app() -> FastAPI:
     async def root() -> dict[str, Any]:
         return {
             "service": "OrchAI API",
-            "version": "0.1.11",
+            "version": "0.2.0",
             "docs_url": str(app.docs_url),
             "redoc_url": str(app.redoc_url),
             "openapi_url": str(app.openapi_url),
@@ -625,6 +711,8 @@ def create_app() -> FastAPI:
                 "provider_settings": "/providers/settings",
                 "provider_capabilities": "/providers/capabilities",
                 "provider_health": "/providers/health",
+                "modules": "/modules",
+                "conversations": "/conversations",
                 "projects": "/projects",
                 "tasks": "/tasks",
                 "authorizations": "/authorizations",
@@ -646,7 +734,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["system"], summary="Check basic service health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "version": "0.1.11"}
+        return {"status": "ok", "version": "0.2.0"}
 
     @app.post(
         "/auth/login",
@@ -983,6 +1071,39 @@ def create_app() -> FastAPI:
         }
 
     @app.get(
+        "/policies/automatic",
+        tags=["system"],
+        summary="Show the persisted automatic-mode execution policy",
+        dependencies=[Depends(require_permission("policies:evaluate"))],
+    )
+    async def get_automatic_policy(database_url: str | None = None) -> dict[str, Any]:
+        runtime = build_sqlalchemy_runtime(_database_url(database_url))
+        policy = await runtime.automatic_policy_service.get_automatic_policy()
+        return _serialize_automatic_policy(policy)
+
+    @app.put(
+        "/policies/automatic",
+        tags=["system"],
+        summary="Replace the persisted automatic-mode execution policy",
+        dependencies=[Depends(require_permission("policies:manage"))],
+    )
+    async def set_automatic_policy(request: AutomaticPolicySetRequest) -> dict[str, Any]:
+        runtime = build_sqlalchemy_runtime(_database_url(request.database_url))
+        policy = AutomaticExecutionPolicy(
+            allowed_operations=tuple(
+                (entry.role, entry.action) for entry in request.allowed_operations
+            ),
+            allowed_cross_role_transitions=tuple(
+                (entry.previous_role, entry.next_role)
+                for entry in request.allowed_cross_role_transitions
+            ),
+            allow_model_substitution=request.allow_model_substitution,
+            allow_context_expansion=request.allow_context_expansion,
+        )
+        updated = await runtime.automatic_policy_service.set_automatic_policy(policy)
+        return _serialize_automatic_policy(updated)
+
+    @app.get(
         "/settings/runtime",
         tags=["system"],
         summary="Show effective runtime settings",
@@ -1088,6 +1209,232 @@ def create_app() -> FastAPI:
         }
 
     @app.get(
+        "/modules",
+        tags=["modules"],
+        summary="List available Modules (Forge, Studio, ...)",
+        dependencies=[Depends(require_permission())],
+    )
+    async def list_modules_route() -> dict[str, Any]:
+        modules = list_modules()
+        return {
+            "modules": [_serialize_module(module) for module in modules],
+            "count": len(modules),
+        }
+
+    @app.get(
+        "/modules/{module_id}",
+        tags=["modules"],
+        summary="Show one Module's metadata",
+        dependencies=[Depends(require_permission())],
+    )
+    async def get_module_route(module_id: str) -> dict[str, Any]:
+        module = get_module(ModuleId(module_id))
+        if module is None:
+            raise HTTPException(status_code=404, detail=f"unknown module: {module_id!r}")
+        return _serialize_module(module)
+
+    @app.post(
+        "/conversations",
+        tags=["conversations"],
+        summary="Start a new conversation (ADR-014)",
+        dependencies=[Depends(require_permission())],
+    )
+    async def create_conversation_route(request: ConversationCreateRequest) -> dict[str, Any]:
+        settings = _settings_override(request.database_url)
+        runtime = build_conversation_runtime_from_settings(settings)
+        try:
+            conversation = await runtime.conversation_service.create_conversation(
+                CreateConversationCommand(
+                    module_id=ModuleId(request.module_id),
+                    project_id=ProjectId(request.project_id) if request.project_id else None,
+                    title=request.title,
+                )
+            )
+        except UnknownModuleError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"unknown module: {request.module_id!r}"
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _serialize_conversation(conversation)
+
+    @app.get(
+        "/conversations",
+        tags=["conversations"],
+        summary="List conversations",
+        dependencies=[Depends(require_permission())],
+    )
+    async def list_conversations_route(
+        module_id: str | None = None,
+        project_id: str | None = None,
+        limit: int = 20,
+        database_url: str | None = None,
+    ) -> dict[str, Any]:
+        runtime = build_conversation_runtime_from_settings(_settings_override(database_url))
+        conversations = await runtime.conversation_service.list_conversations(
+            module_id=ModuleId(module_id) if module_id else None,
+            project_id=ProjectId(project_id) if project_id else None,
+            limit=limit,
+        )
+        return {
+            "conversations": [_serialize_conversation(c) for c in conversations],
+            "count": len(conversations),
+        }
+
+    @app.get(
+        "/conversations/{conversation_id}",
+        tags=["conversations"],
+        summary="Show one conversation",
+        dependencies=[Depends(require_permission())],
+    )
+    async def get_conversation_route(
+        conversation_id: str,
+        database_url: str | None = None,
+    ) -> dict[str, Any]:
+        runtime = build_conversation_runtime_from_settings(_settings_override(database_url))
+        try:
+            conversation = await runtime.conversation_service.get_conversation(
+                ConversationId(conversation_id)
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"unknown conversation: {conversation_id!r}"
+            ) from exc
+        return _serialize_conversation(conversation)
+
+    @app.post(
+        "/conversations/{conversation_id}/messages",
+        tags=["conversations"],
+        summary="Send a user message and stream the assistant's reply (SSE)",
+        dependencies=[Depends(require_permission())],
+    )
+    async def send_conversation_message_route(
+        conversation_id: str,
+        request: ConversationMessageCreateRequest,
+    ) -> StreamingResponse:
+        settings = _settings_override(request.database_url)
+        runtime = build_conversation_runtime_from_settings(settings)
+
+        # Validated eagerly, before the streaming response starts, so an
+        # unknown conversation still gets a real 404 -- once the SSE body
+        # begins, the HTTP status line has already been sent and any
+        # further error can only be signaled in-band (a `type: "error"`
+        # event), the same tradeoff every streaming chat API makes.
+        try:
+            await runtime.conversation_service.get_conversation(
+                ConversationId(conversation_id)
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"unknown conversation: {conversation_id!r}"
+            ) from exc
+
+        async def event_stream() -> AsyncIterator[str]:
+            async for event in runtime.conversation_service.send_message_stream(
+                SendMessageCommand(
+                    conversation_id=ConversationId(conversation_id),
+                    content=request.content,
+                    model=request.model,
+                )
+            ):
+                yield _serialize_stream_event(event)
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    @app.get(
+        "/conversations/{conversation_id}/messages",
+        tags=["conversations"],
+        summary="List a conversation's messages",
+        dependencies=[Depends(require_permission())],
+    )
+    async def list_conversation_messages_route(
+        conversation_id: str,
+        limit: int = 100,
+        database_url: str | None = None,
+    ) -> dict[str, Any]:
+        runtime = build_conversation_runtime_from_settings(_settings_override(database_url))
+        messages = await runtime.conversation_service.list_messages(
+            ConversationId(conversation_id), limit=limit
+        )
+        return {
+            "messages": [_serialize_message(message) for message in messages],
+            "count": len(messages),
+        }
+
+    @app.post(
+        "/conversations/{conversation_id}/escalate",
+        tags=["conversations"],
+        summary="Escalate a message into a real Task via /requests (ADR-014 §2)",
+        description=(
+            "Explicit-only escalation: a conversation message never turns into "
+            "a Task on its own (ADR-014 invariant #2). This reuses the exact "
+            "same orchestration machinery POST /requests does -- authorization, "
+            "policy, and suggestion evaluation apply identically -- and records "
+            "the resulting task_id/execution_id on the persisted user message."
+        ),
+        dependencies=[Depends(require_permission("requests:create"))],
+    )
+    async def escalate_conversation_message_route(
+        conversation_id: str,
+        request: ConversationEscalateRequest,
+    ) -> dict[str, Any]:
+        settings = _settings_override(request.database_url)
+        url = settings.database.sqlalchemy_url
+        conversation_runtime = build_conversation_runtime_from_settings(settings)
+
+        try:
+            conversation = await conversation_runtime.conversation_service.get_conversation(
+                ConversationId(conversation_id)
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"unknown conversation: {conversation_id!r}"
+            ) from exc
+        if conversation.project_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="conversation has no project to escalate against",
+            )
+
+        project_runtime = build_sqlalchemy_runtime(url)
+        project = await project_runtime.project_service.get_project(conversation.project_id)
+
+        prompt_lines = request.content.strip().splitlines()
+        title = prompt_lines[0][:120] if prompt_lines else "Untitled request"
+        context_path = request.context_paths[0] if request.context_paths else "."
+
+        flow_result = await run_local_flow(
+            project_root=Path(project.root_location),
+            context_path=context_path,
+            title=title,
+            model=request.model or settings.ai_provider.model or "local-demo",
+            dependencies=build_local_flow_dependencies_from_settings(settings),
+            storage_label=url,
+            provider_target=request.provider_target,
+            execution_mode=request.execution_mode,
+            approve_suggestion=request.approve_suggestion,
+        )
+
+        task_id = flow_result.get("task_id", "")
+        execution_id = flow_result.get("execution_id") or None
+        message = await conversation_runtime.conversation_service.escalate_message(
+            conversation_id=ConversationId(conversation_id),
+            content=request.content,
+            task_id=TaskId(task_id),
+            execution_id=ExecutionId(execution_id) if execution_id else None,
+        )
+
+        snapshot = await collect_task_snapshot(
+            runtime=project_runtime,
+            task_id=TaskId(task_id),
+            history_limit=50,
+        )
+        return {
+            "message": _serialize_message(message),
+            "flow": _serialize_request_flow(snapshot, request_id=task_id),
+        }
+
+    @app.get(
         "/projects/{project_id}",
         dependencies=[Depends(require_permission("projects:read"))],
     )
@@ -1098,6 +1445,37 @@ def create_app() -> FastAPI:
         runtime = build_sqlalchemy_runtime(_database_url(database_url))
         project = await runtime.project_service.get_project(ProjectId(project_id))
         return _serialize_project(project)
+
+    @app.get(
+        "/projects/{project_id}/attachments",
+        tags=["conversations"],
+        summary="Discover a project's attachment/media resources (Studio, ADR-015)",
+        description=(
+            "Uses MediaWorkspaceProjectAdapter, independent of whatever "
+            "adapter_type the project was registered with -- Studio "
+            "browses the same connected folder Forge sees, just through "
+            "a media-oriented lens (docs/architecture/MODULES.md)."
+        ),
+        dependencies=[Depends(require_permission("projects:read"))],
+    )
+    async def list_project_attachments(
+        project_id: str,
+        limit: int = Query(50, ge=1, le=200),
+        database_url: str | None = None,
+    ) -> dict[str, Any]:
+        runtime = build_sqlalchemy_runtime(_database_url(database_url))
+        try:
+            project = await runtime.project_service.get_project(ProjectId(project_id))
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"unknown project: {project_id!r}"
+            ) from exc
+        adapter = MediaWorkspaceProjectAdapter(Path(project.root_location))
+        discovery = await adapter.discover(limit=limit)
+        return {
+            "metadata": dict(discovery.metadata),
+            "resources": [_serialize_resource(resource) for resource in discovery.resources],
+        }
 
     @app.get(
         "/tasks",
@@ -1301,6 +1679,18 @@ def create_app() -> FastAPI:
                 target_state=request.target_state,
             )
         )
+        return _serialize_execution(execution)
+
+    @app.post(
+        "/executions/{execution_id}/cancel",
+        dependencies=[Depends(require_permission("executions:manage"))],
+    )
+    async def cancel_execution(
+        execution_id: str,
+        request: ExecutionCancelRequest,
+    ) -> dict[str, Any]:
+        runtime = build_sqlalchemy_runtime(_database_url(request.database_url))
+        execution = await runtime.execution_engine.cancel(ExecutionId(execution_id))
         return _serialize_execution(execution)
 
     @app.post(
@@ -1540,6 +1930,36 @@ def create_app() -> FastAPI:
         return {
             "records": [_serialize_metric_record(record) for record in records],
             "count": len(records),
+        }
+
+    @app.get(
+        "/metrics/summary",
+        tags=["system"],
+        summary="Aggregate (count/sum/avg) metrics, grouped by role/action/model/project",
+        dependencies=[Depends(require_permission("projects:read"))],
+    )
+    async def summarize_metrics(
+        project_id: str | None = None,
+        name: str | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        group_by: str = "",
+        database_url: str | None = None,
+    ) -> dict[str, Any]:
+        runtime = build_sqlalchemy_runtime(_database_url(database_url))
+        try:
+            summaries = await runtime.metrics_repository.summarize(
+                project_id=ProjectId(project_id) if project_id is not None else None,
+                name=name,
+                since=since,
+                until=until,
+                group_by=_parse_group_by(group_by),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "summaries": [_serialize_metric_summary(summary) for summary in summaries],
+            "count": len(summaries),
         }
 
     @app.get(
@@ -2122,6 +2542,23 @@ def create_app() -> FastAPI:
         ]
         return {"projects": projects, "count": len(projects)}
 
+    # OrchAI Desktop (ADR-017): when the desktop shell has a built frontend
+    # available, it points ORCHAI_DESKTOP_STATIC_DIR at it before creating
+    # this app. Mounted under /app, not "/" -- the API already owns "/"
+    # (the entry-points index above) and every other top-level path; a
+    # mount at "/" would never be reached for those exact paths, since
+    # explicit routes registered earlier always match first, but would
+    # still shadow any *new* top-level API route added later. No-op for
+    # every other caller (CLI, direct HTTP, tests): the env var is unset
+    # by default.
+    desktop_static_dir = os.environ.get("ORCHAI_DESKTOP_STATIC_DIR")
+    if desktop_static_dir and Path(desktop_static_dir).is_dir():
+        app.mount(
+            "/app",
+            StaticFiles(directory=desktop_static_dir, html=True),
+            name="orchai-desktop-frontend",
+        )
+
     return app
 
 
@@ -2129,6 +2566,10 @@ def _database_url(url: str | None) -> str:
     if url is None:
         return load_settings().database.sqlalchemy_url
     return DatabaseSettings(url=url).sqlalchemy_url
+
+
+def _parse_group_by(value: str) -> tuple[str, ...]:
+    return tuple(field.strip() for field in value.split(",") if field.strip())
 
 
 def _settings_override(database_url: str | None) -> OrchAISettings:
@@ -2182,6 +2623,70 @@ def _tuple_or_none(values: list[str] | None) -> tuple[str, ...] | None:
     if values is None:
         return None
     return tuple(values)
+
+
+def _serialize_module(module) -> dict[str, Any]:
+    # `system_prompt` is deliberately never included (ADR-015 invariant #2)
+    # -- it is internal orchestration configuration, not display metadata.
+    return {
+        "module_id": str(module.id),
+        "name": module.name,
+        "description": module.description,
+        "default_role": module.default_role.value,
+        "allowed_roles": sorted(role.value for role in module.allowed_roles),
+        "allowed_actions": sorted(action.value for action in module.allowed_actions),
+        "suggested_models": list(module.suggested_models),
+        "project_adapter_kind": module.project_adapter_kind,
+        "task_pipeline_mode": module.task_pipeline_mode,
+        "requires_project": module.requires_project,
+    }
+
+
+def _serialize_conversation(conversation) -> dict[str, Any]:
+    return {
+        "conversation_id": str(conversation.id),
+        "module_id": str(conversation.module_id),
+        "project_id": str(conversation.project_id) if conversation.project_id else None,
+        "title": conversation.title,
+        "created_at": conversation.created_at.isoformat(),
+        "archived": conversation.archived,
+    }
+
+
+def _serialize_message(message) -> dict[str, Any]:
+    return {
+        "message_id": str(message.id),
+        "conversation_id": str(message.conversation_id),
+        "role": message.role.value,
+        "content": message.content,
+        "created_at": message.created_at.isoformat(),
+        "status": message.status.value,
+        "error": message.error,
+        "provider_name": message.provider_name,
+        "model_id": str(message.model_id) if message.model_id else None,
+        "linked_task_id": str(message.linked_task_id) if message.linked_task_id else None,
+        "linked_execution_id": str(message.linked_execution_id)
+        if message.linked_execution_id
+        else None,
+        "resource_usage": {
+            "input_tokens": message.resource_usage.input_tokens,
+            "output_tokens": message.resource_usage.output_tokens,
+            "estimated_cost": message.resource_usage.estimated_cost,
+        },
+    }
+
+
+def _serialize_stream_event(event) -> str:
+    """Format one `ConversationStreamEvent` as an SSE `data:` line (Phase 4)."""
+
+    payload: dict[str, Any] = {"type": event.type}
+    if event.type == "delta":
+        payload["content"] = event.content
+    else:
+        payload["message"] = _serialize_message(event.message) if event.message else None
+    if event.type == "error":
+        payload["error"] = event.error
+    return f"data: {json.dumps(payload)}\n\n"
 
 
 def _serialize_project(project) -> dict[str, Any]:
@@ -2480,6 +2985,32 @@ def _serialize_metric_record(record) -> dict[str, Any]:
         "project_id": str(record.project_id) if record.project_id is not None else None,
         "execution_id": str(record.execution_id) if record.execution_id is not None else None,
         "dimensions": dict(record.dimensions),
+    }
+
+
+def _serialize_metric_summary(summary) -> dict[str, Any]:
+    return {
+        "name": summary.name,
+        "unit": summary.unit,
+        "count": summary.count,
+        "sum": summary.sum,
+        "avg": summary.avg,
+        "dimensions": dict(summary.dimensions),
+    }
+
+
+def _serialize_automatic_policy(policy: AutomaticExecutionPolicy) -> dict[str, Any]:
+    return {
+        "allowed_operations": [
+            {"role": role.value, "action": action.value}
+            for role, action in policy.allowed_operations
+        ],
+        "allowed_cross_role_transitions": [
+            {"previous_role": previous.value, "next_role": next_role.value}
+            for previous, next_role in policy.allowed_cross_role_transitions
+        ],
+        "allow_model_substitution": policy.allow_model_substitution,
+        "allow_context_expansion": policy.allow_context_expansion,
     }
 
 

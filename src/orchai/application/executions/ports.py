@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -79,6 +79,24 @@ class AIProviderExecutionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class AIProviderStreamChunk:
+    """One incremental chunk of a streamed execution (ADR-013, Phase 4).
+
+    `Execution` itself still records exactly one terminal result
+    (`AIProviderExecutionResult`) once the stream ends -- this DTO exists
+    only for the transport between the provider and whatever accumulates
+    it (`ExecutionEngine` for Task-bounded work; `ConversationService`
+    for plain chat, via the separate `ConversationAIProviderPort`).
+    """
+
+    delta: str
+    finished: bool = False
+    finish_reason: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class AIProviderHealthCheck:
     """Provider-independent operational health information."""
 
@@ -122,6 +140,16 @@ class AIProviderPort(Protocol):
         request: AIProviderExecutionRequest,
     ) -> AIProviderExecutionResult:
         """Execute a bounded request using the selected AI provider."""
+
+    def execute_stream(
+        self,
+        request: AIProviderExecutionRequest,
+    ) -> AsyncIterator[AIProviderStreamChunk]:
+        """Streaming variant of `execute()` (ADR-013, Phase 4).
+
+        Not `async def`: implementations are async generators, called
+        directly (never awaited first) to get the iterator.
+        """
 
     async def cancel(self, execution_id: ExecutionId) -> None:
         """Cancel one execution when supported by the provider."""

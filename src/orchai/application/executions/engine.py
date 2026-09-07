@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Callable
 
 from orchai.application.context import ContextService, ResolveExecutionContextCommand
@@ -22,7 +23,12 @@ from orchai.application.executions.ports import (
 from orchai.application.executions.service import ExecutionService
 from orchai.infrastructure.projects.errors import ProjectAdapterError
 from orchai.domain.context import ContextError
-from orchai.domain.executions import Execution, ExecutionState, ResourceUsage
+from orchai.domain.executions import (
+    Execution,
+    ExecutionState,
+    InvalidExecutionStateTransitionError,
+    ResourceUsage,
+)
 from orchai.domain.identifiers import ExecutionId
 
 _ACTIVE_EXECUTION_TASKS: dict[ExecutionId, asyncio.Task[Execution]] = {}
@@ -61,6 +67,38 @@ class ExecutionEngine:
 
         active_task = _ACTIVE_EXECUTION_TASKS.get(execution_id)
         return active_task is not None and not active_task.done()
+
+    async def cancel(self, execution_id: ExecutionId) -> Execution:
+        """Cancel one execution: best-effort at the provider, authoritative via state.
+
+        Cancelling the tracked ``asyncio.Task`` (if any) is the real
+        mechanism -- it interrupts whatever the provider call inside
+        :meth:`run` is currently awaiting. ``AIProviderPort.cancel()`` is a
+        secondary, best-effort signal for a provider that tracks its own
+        server-side request id; its failure must never block cancellation.
+        Neither call updates the persisted execution state on its own --
+        ``asyncio.CancelledError`` is a ``BaseException``, so it propagates
+        out of :meth:`run` uncaught by its ``except Exception`` handler,
+        leaving the execution wherever it last transitioned to -- so this
+        method always finishes by transitioning the execution to
+        ``CANCELLED`` directly. If the execution has already reached a
+        terminal state on its own (e.g. it completed before the
+        cancellation request was applied), that transition is invalid;
+        cancelling an already-finished execution is treated as a no-op
+        rather than an error.
+        """
+
+        active_task = _ACTIVE_EXECUTION_TASKS.get(execution_id)
+        if active_task is not None and not active_task.done():
+            active_task.cancel()
+
+        with contextlib.suppress(AIProviderError):
+            await self._ai_provider.cancel(execution_id)
+
+        try:
+            return await self._execution_service.cancel_execution(execution_id)
+        except InvalidExecutionStateTransitionError:
+            return await self._execution_service.get_execution(execution_id)
 
     async def run(self, execution_id: ExecutionId) -> Execution:
         """Run one authorized execution to completion or provider failure."""

@@ -17,10 +17,46 @@ class SuggestionEngine:
         self._repository = repository
 
     async def suggest_next(self, task: Task) -> Suggestion | None:
-        suggestion = _suggestion_for_task(task)
-        if suggestion is not None:
-            await self._repository.add(suggestion)
-        return suggestion
+        """Return the current recommendation for `task`, reusing a pending one.
+
+        Every call for a task still sitting in the same blocked state
+        (e.g. a repeated `/advance` or `/approve` call before the
+        suggestion is resolved) must return the *same* `Suggestion`
+        record rather than generating a fresh duplicate: callers mark
+        the returned suggestion PRESENTED/ACCEPTED immediately after this
+        returns, and `interfaces/api/main.py::_serialize_request_flow`
+        surfaces "the most recently generated PRESENTED suggestion" as
+        the flow's authoritative pending item. Without reuse, an older
+        PRESENTED suggestion from an earlier call is left behind
+        unresolved forever once a newer duplicate is generated and
+        accepted, so a resolved stage could still be reported as
+        pending indefinitely. Matching on `(suggested_role,
+        suggested_action)` --- not just "any PRESENTED suggestion for
+        this task" --- keeps this correct even if the task's state
+        advanced through some other path (e.g. a direct
+        `POST /tasks/{id}/transition`) and left a stale, no-longer
+        relevant PRESENTED suggestion behind for a state the task has
+        since moved past.
+        """
+
+        computed = _suggestion_for_task(task)
+        if computed is None:
+            return None
+        existing = await self._repository.list(task_id=task.id, limit=50)
+        pending = next(
+            (
+                suggestion
+                for suggestion in existing
+                if suggestion.status is SuggestionStatus.PRESENTED
+                and suggestion.suggested_role == computed.suggested_role
+                and suggestion.suggested_action == computed.suggested_action
+            ),
+            None,
+        )
+        if pending is not None:
+            return pending
+        await self._repository.add(computed)
+        return computed
 
     async def mark_status(
         self,

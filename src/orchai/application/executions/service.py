@@ -131,6 +131,16 @@ class ExecutionService:
         )
         return execution
 
+    async def cancel_execution(self, execution_id: ExecutionId) -> Execution:
+        """Transition an execution to CANCELLED (raises if already terminal)."""
+
+        return await self.transition_execution(
+            TransitionExecutionCommand(
+                execution_id=execution_id,
+                target_state=ExecutionState.CANCELLED,
+            )
+        )
+
     async def get_execution(self, execution_id: ExecutionId) -> Execution:
         return await self._repository.get(execution_id)
 
@@ -157,6 +167,8 @@ def _transition_event_type(target: ExecutionState) -> EventType:
         return EventType.EXECUTION_COMPLETED
     if target is ExecutionState.FAILED:
         return EventType.EXECUTION_FAILED
+    if target is ExecutionState.CANCELLED:
+        return EventType.EXECUTION_CANCELLED
     return EventType.EXECUTION_STATE_TRANSITIONED
 
 

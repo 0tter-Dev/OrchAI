@@ -18,6 +18,21 @@ backlog.
 
 ------------------------------------------------------------------------
 
+## Immediate Priority --- Land Already-Completed Local Work
+
+Everything described as "done" below (all of Priority 1 Phases 1--4,
+Priority 2, Priority 3 items 1--4, and Priority 4 item 1) is
+implemented and sitting in the local working tree, not yet committed
+or pushed. Re-validated directly on 2026-09-06:
+`uv run ruff check` clean, full suite `294 passed`,
+`uv run orchai --help` smoke check passes, `uv lock --check`
+consistent. Landing this work through the process now defined in
+[`GIT-GITHUB-FLOW.md`](GIT-GITHUB-FLOW.md) --- not writing more of
+it --- is the actual next action, ahead of anything else in this
+document.
+
+------------------------------------------------------------------------
+
 ## Audit basis
 
 Before drafting this backlog, the following was verified directly
@@ -76,6 +91,85 @@ OpenAI are already implemented and only Anthropic is missing.
 - When an item is completed, remove it from here and record it in
   `STATUS.md`'s changelog narrative, per the existing convention in
   that document.
+
+------------------------------------------------------------------------
+
+## OrchAI Desktop Initiative (ADR-013 through ADR-017)
+
+The active strategic direction is turning OrchAI into a Windows desktop
+chat application (`docs/VISION.md`), with a general layer (chat,
+conversations, projects, a single local user, metrics/audit) and
+specialized Modules (Forge, Studio) on top of the existing orchestration
+core. Design work is recorded in ADR-013 (LiteLLM + streaming), ADR-014
+(Conversation/Message domain), ADR-015 (Module concept), ADR-016
+(single-user identity for desktop), and ADR-017 (the `pywebview` shell
+itself); the phased implementation plan lives in
+`docs/architecture/DESKTOP-APPLICATION.md` and is not duplicated here.
+All 7 phases of that plan are now implemented (shell skeleton, Project
+Picker + Forge module registration, persistent conversation, SSE
+streaming end-to-end in the Forge chat screen, explicit message→Task
+escalation with an Approval Card, a Studio skeleton --- a second module
+with its own `media_workspace` project adapter, attachment discovery,
+and streaming chat, reusing the `TASK_PLANNER`/`PLAN` pair per ADR-015's
+"Implementation Note (Phase 6)" rather than resolving §5's
+dedicated-vocabulary question --- and, closing the initiative, Phase 7
+Hardening: runtime `AutomaticExecutionPolicy` configuration, execution
+cancellation, metrics aggregation, a metrics/audit dashboard in the
+desktop UI, the `orchestrator.py` decomposition, PyInstaller packaging,
+and a headless-mode `Dockerfile`; see `docs/STATUS.md`'s Phase 7 entry
+for the full breakdown). The OrchAI Desktop initiative itself is
+complete; further work in this area is now incremental hardening, not
+initiative phases.
+
+This initiative reconciles and supersedes some of the priorities below,
+noted inline at each affected item. New backlog items belong in
+`docs/architecture/DESKTOP-APPLICATION.md`'s phase list, not as new
+top-level priorities in this document, to avoid the same work being
+tracked in two places.
+
+------------------------------------------------------------------------
+
+## Documentation & Delivery-Flow Refactor (in progress)
+
+Step 1 is done (2026-09-06): [`GIT-GITHUB-FLOW.md`](GIT-GITHUB-FLOW.md)
+established as the source of truth for branching, commit, PR,
+versioning, and release discipline; `.github/workflows/ci.yml` renamed
+to `OrchAI-FullValidation.yml` (job renamed to `Backend Quality`, its
+`.pytest-tmp` creation bug fixed once exercised on a clean checkout for
+the first time); the new manual `.github/workflows/OrchAI-Release.yml`
+plus `scripts/release.py` (tag validation + git-log release notes);
+`.github/pull_request_template.md` updated with Version Decision and
+Documentation Checklist sections; `.github/dependabot.yml` removed
+(the 8 stale Dependabot PRs it had opened were closed). Landed via
+pull request #9.
+
+Remaining steps, in order:
+
+1.  Translate `docs/API-ENDPOINTS-REPORT.md` to English.
+2.  Redesign `docs/STATUS.md` as a pure status snapshot (remap the
+    current ~45-row table onto a 4-state vocabulary), archiving its
+    historical narrative into a new `docs/HISTORY.md`; delete
+    `docs/architecture/STATUS.md` and `docs/domains/STATUS.md`.
+3.  Consolidate `docs/architecture/` (18 files) and `docs/domains/`
+    (14 files) into a single `docs/context/` (16 files), as 2--3 pull
+    requests grouped by cluster.
+4.  Retire the ADR format: move all 17 ADRs to
+    `docs/archive/decisions/`, folding still-relevant decisions into
+    `ARCHITECTURAL-CONTRACT.md` or the matching `docs/context/*.md`
+    file's "Key Rules" section.
+5.  Consolidate root docs: new `docs/DEVELOPMENT-GUIDE.md`, trim
+    `ARCHITECTURE.md`/`IMPLEMENTATION-MAP.md`, fold `docs/VISION.md`
+    into `ARCHITECTURAL-CONTRACT.md`, retire `CONTRIBUTING.md` and
+    `docs/engineering/DELIVERY-BASELINE.md` (both superseded by
+    `GIT-GITHUB-FLOW.md` already).
+6.  Merge `docs/USER-ONBOARDING.md` + `docs/USER-OPERATIONS-GUIDE.md`
+    into `docs/USER-GUIDE.md` + `docs/OPERATIONS-REFERENCE.md`.
+7.  Rewrite `docs/INDEX.md` as the single navigation hub.
+8.  Restructure `AGENTS.md` (explicit Source-of-Truth order,
+    `docs/context/` authorization gate, agent identity and PR
+    delivery workflow).
+
+This runs in parallel with the backlog below; it does not block it.
 
 ------------------------------------------------------------------------
 
@@ -157,6 +251,12 @@ authorization before implementation begins, not merely a note in this
 backlog. Do not start it without that explicit go-ahead, and do not fold
 it into any other item's scope.
 
+ADR-016 (`docs/decisions/ADR-016-DESKTOP-SINGLE-USER-IDENTITY-SIMPLIFICATION.md`)
+confirms this remains untouched by the OrchAI Desktop initiative: the
+desktop shell reuses the existing IAM implementation only for
+attribution (a single local user), never enables
+`ORCHAI_AUTH_ENFORCED`, and does not start this multi-user revisit.
+
 ### Phase 1 --- Identity domain, in isolation (done, 2026-08-23)
 
 Isolated `domain/identity` + `application/identity` + `infrastructure/identity`
@@ -227,91 +327,122 @@ for first, not the start of that refactor.
 
 ------------------------------------------------------------------------
 
-## Priority 2 --- Complete the AI Provider Adapter Set
+## Priority 2 --- AI Provider Adapter: LiteLLM Migration (ADR-013)
 
-1.  **Anthropic (Claude) adapter.** Add
-    `src/orchai/infrastructure/ai/anthropic.py` implementing
-    `AIProviderPort`, following the existing pattern in `ollama.py` /
-    `openai_codex.py` (HTTPX-backed, `capabilities()`,
-    `validate_request()`, `healthcheck()`, `execute()`, `cancel()`).
-    Wire it into `AIProviderSettings.provider` (currently
-    `Literal["stub", "ollama", "openai"]`) and
-    `provider_from_settings()` in `bootstrap/runtime.py`. Add
-    `tests/unit/infrastructure/test_anthropic_adapter.py` mirroring the
-    existing adapter tests.
-2.  **Streaming support.** Both existing adapters make a single
-    blocking HTTP call and return the full result. If interactive
-    or long-running executions become a priority, revisit
-    `AIProviderPort.execute()` and the adapters for a streaming
-    variant --- this is a bigger architectural change and should get
-    its own ADR before implementation, per
-    `docs/architecture/ADAPTER-CONTRACTS.md`'s note that "the exact
-    interface may evolve."
-3.  **Retry/backoff policy.** Neither adapter retries on transient
-    HTTP failures today; they raise `AIProviderError` immediately. If
-    real usage surfaces this as a problem, add a bounded retry policy
-    at the adapter or `ExecutionEngine` level rather than duplicating
-    retry logic per adapter.
+Superseded by ADR-013. The previously planned manual Anthropic adapter
+is no longer needed --- LiteLLM already speaks to Anthropic's API, along
+with every other provider this item would have added one at a time.
+
+1.  ~~**Anthropic (Claude) adapter.**~~ Obsolete. LiteLLM covers
+    Anthropic (and Gemini, and other providers) without a
+    provider-specific hand-rolled adapter.
+2.  **Streaming support.** Resolved by ADR-013:
+    `AIProviderPort.execute_stream()` plus `infrastructure/ai/litellm_provider.py`.
+    See `docs/architecture/DESKTOP-APPLICATION.md` Phase 4 for the
+    implementation phase.
+3.  **Retry/backoff policy.** Resolved by ADR-013: LiteLLM provides
+    retry/backoff natively, removing the need for a bespoke policy at
+    the adapter or `ExecutionEngine` level.
+4.  **Migration (done, OrchAI Desktop Phase 3).**
+    `infrastructure/ai/litellm_provider.py` implements `AIProviderPort`
+    (`execute()`, non-streaming; `execute_stream()` is Phase 4);
+    `ollama.py` and `openai_codex.py` and their tests are deleted;
+    `AIProviderSettings.provider` is now `Literal["stub", "litellm"]`,
+    and `provider_from_settings()` (`bootstrap/runtime.py`) constructs
+    `LiteLLMProvider` for every non-stub case. Provider routing moved
+    entirely into `ORCHAI_AI_MODEL`'s `"<provider>/<model>"` prefix
+    (e.g. `ollama/qwen2.5-coder:latest`, `openai/gpt-5`).
 
 ------------------------------------------------------------------------
 
 ## Priority 3 --- Close Known Runtime Gaps
 
-These are already named as gaps in `docs/STATUS.md`; they are
-restated here as concrete, scoped work items.
+These were already named as gaps in `docs/STATUS.md`; items 1--3 are
+now closed (OrchAI Desktop Phase 7.1--7.3).
 
-1.  **`AutomaticExecutionPolicy` runtime configuration.** Today the
-    policy is only configurable by constructing
-    `AutomaticExecutionPolicy(...)` in Python
-    (`src/orchai/application/policies/service.py`); there is no CLI or
-    API surface. Add a persisted policy configuration (likely a new
-    small table/repository, or an extension of existing project/global
-    configuration) plus `orchai policies automatic show|set` CLI
-    commands and a corresponding `GET`/`PUT /policies/automatic`
-    API pair, so an operator can configure allowed `(role, action)`
-    pairs without redeploying code. Until this exists, `AUTOMATIC`
-    mode is only reachable through the Python API, not the public
-    CLI/API surface, for any pair beyond the hardcoded default
-    `(DEVELOPER, IMPLEMENT)`.
-2.  **Execution cancellation.** `AIProviderPort.cancel(execution_id)`
-    exists on the port
-    (`src/orchai/application/executions/ports.py`), but nothing in
-    `ExecutionEngine` or `ExecutionService` ever calls it, and both
-    concrete adapters (`ollama.py`, `openai_codex.py`) simply raise
-    "does not support cancellation." Add a `cancel()` path through
-    `ExecutionService` → `ExecutionEngine` → provider, an
-    `EXECUTION_CANCELLED` domain event/state per the existing
-    `domain/executions/state_machine.py`, and expose
-    `POST /executions/{id}/cancel` + `orchai executions cancel`.
-3.  **Metrics aggregation.** `MetricsRepository` currently only
-    supports `add_many()` and a filtered `list()` of raw
-    `MetricRecord`s (`src/orchai/application/metrics/ports.py`). Add
-    aggregation queries (count/sum/avg over a time window, grouped by
-    role/action/model/project) and expose them via a new
-    `GET /metrics/summary` endpoint and `orchai metrics summary`
-    command, per the metric categories already named in
-    `docs/IMPLEMENTATION-MAP.md` §4.11 (token usage, success rate,
-    failure rate, etc.) but never aggregated today.
+1.  **`AutomaticExecutionPolicy` runtime configuration (done, OrchAI
+    Desktop Phase 7.1).** A new singleton-row `AutomaticPolicyRepository`
+    (migration `0010_automatic_policy.sql`) makes the policy
+    runtime-mutable: `LocalPolicyService.evaluate()` re-reads it from
+    the repository on every call instead of freezing it at
+    construction. `GET`/`PUT /policies/automatic` (new
+    `policies:manage` permission for the write) and `orchai policies
+    automatic show|set` expose it -- `AUTOMATIC` mode is now
+    configurable for any `(role, action)` pair through the public
+    CLI/API surface, not just the hardcoded default
+    `(DEVELOPER, IMPLEMENT)` via direct Python construction.
+2.  **Execution cancellation (done, OrchAI Desktop Phase 7.2).**
+    `ExecutionEngine.cancel()` cancels the tracked `asyncio.Task`
+    (populated by `.dispatch()`), treats the provider's own `.cancel()`
+    as a secondary best-effort signal, and always finishes by
+    transitioning the execution to `CANCELLED` directly (publishing the
+    new `EventType.EXECUTION_CANCELLED`) since `asyncio.CancelledError`
+    bypasses `run()`'s own exception handling. `LiteLLMProvider.cancel()`
+    is now a documented no-op rather than raising.
+    `POST /executions/{id}/cancel` and `orchai executions cancel`
+    expose it.
+3.  **Metrics aggregation (done, OrchAI Desktop Phase 7.3).** A new
+    `MetricsRepository.summarize()` (backed by the pure,
+    repository-independent `application/metrics/aggregation.py`)
+    computes count/sum/avg per metric name, grouped by any combination
+    of `project_id`/`role`/`action`/`model_id`/`outcome`, over an
+    optional time window. `GET /metrics/summary` and `orchai metrics
+    summary` expose it. Deliberately scoped to what's already emitted
+    today (success/failure/duration/tokens/cost) -- retry rate and
+    suggestion acceptance rate from `docs/IMPLEMENTATION-MAP.md` §4.11
+    would need cross-referencing suggestions/audit and remain
+    unaggregated.
+4.  **Stale `PRESENTED` suggestions after a task advances (found during
+    OrchAI Desktop Phase 5, fixed).** `Orchestrator._resolve_task_stage()`
+    called `SuggestionEngine.suggest_next()` on every advance/approve
+    call that doesn't pass an explicit stage -- exactly what
+    `POST /requests/{id}/approve` does internally -- generating a new
+    `Suggestion` record each time without ever marking the *previous*
+    `PRESENTED` one for the same task as resolved, so a stale suggestion
+    from an already-resolved stage could win
+    `_serialize_request_flow`'s "most recent PRESENTED" selection and
+    make `GET /requests/{id}/flow` report
+    `PENDING_SUGGESTION`/`PRESENTED` indefinitely after the stage
+    actually completed. Fixed in `SuggestionEngine.suggest_next()`
+    (`application/suggestions/engine.py`): it now reuses an existing
+    `PRESENTED` suggestion matching the task's current
+    `(suggested_role, suggested_action)` instead of duplicating it, and
+    correctly ignores a stale `PRESENTED` suggestion left over for a
+    *different*, already-superseded stage. See ADR-011's "Amendment
+    (OrchAI Desktop Phase 5)" section and
+    `tests/unit/application/test_suggestion_engine.py`.
+    `apps/desktop/frontend/src/screens/ApprovalCard.jsx` no longer needs
+    its earlier `flow.task.state`-based workaround and reads
+    `suggestion.status` directly again.
 
 ------------------------------------------------------------------------
 
 ## Priority 4 --- Deployment and Operational Readiness
 
-`docs/STATUS.md` correctly marks "Deployment Implementation" as
-`PENDING`; there is no `Dockerfile` or deployment automation in the
-repository today, even though `IMPLEMENTATION-MAP.md` §22 lists Docker
-in the technology baseline.
-
-1.  Add a `Dockerfile` (and a `docker-compose.yml` for local
-    PostgreSQL + the API) so the documented technology baseline
-    actually has a runnable container path.
-2.  Extend `docs/engineering/DELIVERY-BASELINE.md`'s CI workflow
-    (`.github/workflows/ci.yml`) toward the items it already lists as
-    deferred: release automation, package publishing, deployment
-    workflows, environment promotion, and secret-scanning/dependency
-    security gates. Treat that document's "what is intentionally not
-    implemented yet" section as the authoritative list --- work
-    through it top to bottom rather than reinventing the sequencing.
+1.  **Add a `Dockerfile` (done, OrchAI Desktop Phase 7.7).** A
+    root-level `Dockerfile` (multi-stage, `uv sync --locked --no-dev`
+    without the `desktop` extra, non-root user, `HEALTHCHECK` against
+    `GET /health`) and `.dockerignore` now give the headless CLI/API
+    deployment shape a runnable container path, per
+    `docs/architecture/DEPLOYMENT-MODEL.md`. No source change was
+    needed: `create_app()` already produces the correct headless
+    behavior (the desktop UI's static mount is conditional on
+    `ORCHAI_DESKTOP_STATIC_DIR`, which nothing sets outside the desktop
+    shell). A `docker-compose.yml` for local PostgreSQL + the API was
+    not added -- still a reasonable, low-effort follow-up if wanted, but
+    not required for the container path itself to work.
+2.  Extend `.github/workflows/OrchAI-FullValidation.yml` and
+    [`GIT-GITHUB-FLOW.md`](GIT-GITHUB-FLOW.md) (which superseded
+    `docs/engineering/DELIVERY-BASELINE.md`, see "Documentation &
+    Delivery-Flow Refactor" above) toward what remains genuinely
+    deferred: package publishing, deployment workflows beyond the
+    existing untested `Dockerfile` (add a CI step that builds and runs
+    it), environment promotion strategy, and dependency security gates
+    (deliberately *not* Dependabot --- that was dropped in favor of
+    this leaner model; a lighter-weight vulnerability scan, if any, is
+    still an open choice). Release-tag validation and git-log-based
+    release notes are no longer deferred: they exist via the manual
+    `OrchAI - Release Validation` workflow and `scripts/release.py`.
 
 ------------------------------------------------------------------------
 
@@ -325,11 +456,16 @@ more code accretes around an ambiguous boundary:
 -   Agent as an explicit domain concept versus a composition of role,
     policy, model, and capabilities.
 -   Workflow responsibility versus State Machine responsibility.
--   Task Engine versus Application Orchestration (the current
-    `Orchestrator` in
-    `src/orchai/application/orchestration/orchestrator.py` has grown
-    to ~56 KB / over a thousand lines --- worth revisiting whether it
-    should be decomposed before it grows further).
+-   Task Engine versus Application Orchestration: the conceptual
+    question (whether these should be distinct concepts) remains open,
+    but the file-size pressure that made it urgent is resolved --
+    `orchestrator.py` was decomposed (OrchAI Desktop Phase 7.5) from
+    1437 lines into `orchestrator.py` (1016 lines, its 3 public methods
+    and 12-collaborator constructor unchanged) plus five sibling
+    modules (`ports.py`, `results.py`, `events.py`, `connections.py`,
+    `stages.py`, `gating.py`) in `application/orchestration/`, each
+    with its own new unit tests (the file had none before). See
+    `docs/STATUS.md`'s Phase 7 entry for the breakdown.
 -   Execution Engine versus Execution domain.
 -   Model Manager versus model/provider contracts.
 -   Context Manager versus Context domain.

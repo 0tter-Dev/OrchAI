@@ -103,7 +103,10 @@ class AIProviderSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    provider: Literal["stub", "ollama", "openai"] = "stub"
+    #: "litellm" covers every real provider (ADR-013) -- routing between
+    #: OpenAI/Anthropic/Gemini/Ollama/etc. is selected by the `model`
+    #: field's "<provider>/<model>" prefix, not by this setting.
+    provider: Literal["stub", "litellm"] = "stub"
     base_url: str | None = None
     api_key: str | None = None
     organization: str | None = None

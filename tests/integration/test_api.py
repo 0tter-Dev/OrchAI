@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 
 from fastapi.testclient import TestClient
@@ -9,6 +10,19 @@ from orchai.infrastructure.configuration import load_settings
 from orchai.interfaces.api import app
 
 _TEST_SECRET_KEY = "api-test-secret-key-with-at-least-32-characters"
+
+
+def _collect_sse_events(client: TestClient, path: str, *, json_body: dict) -> list[dict]:
+    """Post to an SSE endpoint and return every `data:` payload, parsed."""
+
+    events = []
+    with client.stream("POST", path, json=json_body) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        for line in response.iter_lines():
+            if line.startswith("data:"):
+                events.append(json.loads(line[len("data:") :].strip()))
+    return events
 
 
 def _create_user(*, username: str, password: str, is_superuser: bool) -> None:
@@ -49,7 +63,7 @@ def test_api_root_index_and_provider_settings_endpoints() -> None:
     provider_settings_response = client.get("/providers/settings")
     assert provider_settings_response.status_code == 200
     provider_payload = provider_settings_response.json()
-    assert provider_payload["provider"] in {"stub", "ollama", "openai"}
+    assert provider_payload["provider"] in {"stub", "litellm"}
     assert "api_key_configured" in provider_payload
 
     openapi_response = client.get("/openapi.json")
@@ -57,6 +71,190 @@ def test_api_root_index_and_provider_settings_endpoints() -> None:
     openapi_payload = openapi_response.json()
     assert openapi_payload["info"]["title"] == "OrchAI API"
     assert "/providers/settings" in openapi_payload["paths"]
+
+
+def test_api_modules_endpoints_list_and_show_forge_and_studio_without_system_prompt() -> None:
+    client = TestClient(app)
+
+    list_response = client.get("/modules")
+    assert list_response.status_code == 200
+    list_payload = list_response.json()
+    assert list_payload["count"] == 2
+    by_id = {module["module_id"]: module for module in list_payload["modules"]}
+    assert set(by_id) == {"forge", "studio"}
+
+    forge = by_id["forge"]
+    assert forge["name"] == "Forge"
+    assert forge["requires_project"] is True
+    assert forge["project_adapter_kind"] == "local_filesystem"
+    assert forge["task_pipeline_mode"] == "full_workflow"
+    assert "system_prompt" not in forge
+
+    studio = by_id["studio"]
+    assert studio["name"] == "Studio"
+    assert studio["requires_project"] is True
+    assert studio["project_adapter_kind"] == "media_workspace"
+    assert studio["task_pipeline_mode"] == "conversational_with_protected_operations"
+    assert studio["allowed_roles"] == ["TASK_PLANNER"]
+    assert studio["allowed_actions"] == ["PLAN"]
+    assert "system_prompt" not in studio
+
+    show_response = client.get("/modules/forge")
+    assert show_response.status_code == 200
+    assert show_response.json() == forge
+
+    missing_response = client.get("/modules/does-not-exist")
+    assert missing_response.status_code == 404
+
+
+def test_api_conversation_endpoints_persist_and_reply_to_messages(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    client = TestClient(app)
+
+    create_response = client.post(
+        "/conversations",
+        json={"module_id": "forge", "project_id": "proj-1", "database_url": database_url},
+    )
+    assert create_response.status_code == 200
+    conversation = create_response.json()
+    conversation_id = conversation["conversation_id"]
+    assert conversation["module_id"] == "forge"
+    assert conversation["archived"] is False
+
+    events = _collect_sse_events(
+        client,
+        f"/conversations/{conversation_id}/messages",
+        json_body={"content": "hello there", "database_url": database_url},
+    )
+    assert events[0]["type"] == "user_message"
+    assert events[0]["message"]["role"] == "USER"
+    assert events[0]["message"]["content"] == "hello there"
+    assert [event["type"] for event in events[1:-1]] == ["delta"] * (len(events) - 2)
+    assert events[-1]["type"] == "done"
+    assert events[-1]["message"]["role"] == "ASSISTANT"
+    assert events[-1]["message"]["status"] == "COMPLETE"
+    assert events[-1]["message"]["provider_name"] == "stub"
+
+    unknown_conversation_response = client.post(
+        "/conversations/does-not-exist/messages",
+        json={"content": "hi", "database_url": database_url},
+    )
+    assert unknown_conversation_response.status_code == 404
+
+    messages_response = client.get(
+        f"/conversations/{conversation_id}/messages",
+        params={"database_url": database_url},
+    )
+    assert messages_response.status_code == 200
+    assert messages_response.json()["count"] == 2
+
+    list_response = client.get(
+        "/conversations",
+        params={"module_id": "forge", "database_url": database_url},
+    )
+    assert list_response.status_code == 200
+    assert list_response.json()["count"] == 1
+
+    missing_response = client.get(
+        "/conversations/does-not-exist",
+        params={"database_url": database_url},
+    )
+    assert missing_response.status_code == 404
+
+    missing_module_response = client.post(
+        "/conversations",
+        json={"module_id": "does-not-exist", "database_url": database_url},
+    )
+    assert missing_module_response.status_code == 404
+
+    studio_without_project_response = client.post(
+        "/conversations",
+        json={"module_id": "studio", "database_url": database_url},
+    )
+    assert studio_without_project_response.status_code == 400
+
+
+def test_api_conversation_escalate_endpoint_creates_a_linked_task_via_requests(tmp_path) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "README.md").write_text("# Sample project", encoding="utf-8")
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    client = TestClient(app)
+
+    project_response = client.post(
+        "/projects",
+        json={"project_root": str(tmp_path), "database_url": database_url},
+    )
+    assert project_response.status_code == 200
+    project_id = project_response.json()["project_id"]
+
+    conversation_response = client.post(
+        "/conversations",
+        json={"module_id": "forge", "project_id": project_id, "database_url": database_url},
+    )
+    conversation_id = conversation_response.json()["conversation_id"]
+
+    escalate_response = client.post(
+        f"/conversations/{conversation_id}/escalate",
+        json={
+            "content": "Plan: review the README for accuracy",
+            "context_paths": ["README.md"],
+            "database_url": database_url,
+        },
+    )
+    assert escalate_response.status_code == 200
+    payload = escalate_response.json()
+    assert payload["message"]["role"] == "USER"
+    assert payload["message"]["content"] == "Plan: review the README for accuracy"
+    task_id = payload["message"]["linked_task_id"]
+    assert task_id
+    assert payload["flow"]["status"] == "PENDING_SUGGESTION"
+    assert payload["flow"]["task"]["state"] == "PLANNING"
+
+    # The escalation is visible in the conversation transcript, and the
+    # linked Task can be approved through the exact same /requests surface
+    # any other caller uses -- escalation introduces no separate path.
+    messages_response = client.get(
+        f"/conversations/{conversation_id}/messages",
+        params={"database_url": database_url},
+    )
+    assert messages_response.json()["messages"][0]["linked_task_id"] == task_id
+
+    approve_response = client.post(
+        f"/requests/{task_id}/approve",
+        json={
+            "reason": "looks fine",
+            "context_paths": ["README.md"],
+            "database_url": database_url,
+        },
+    )
+    assert approve_response.status_code == 200
+    assert approve_response.json()["approved"] is True
+    assert approve_response.json()["task_state"] == "PLANNED"
+
+    # Regression test for the stale-suggestion bug found while verifying
+    # this exact flow (docs/TO-DO.md Priority 3.4): approving must not
+    # leave the flow permanently reporting PENDING_SUGGESTION, and must
+    # not leave behind a duplicate PRESENTED suggestion record alongside
+    # the one that was actually accepted.
+    flow_after_approve = client.get(
+        f"/requests/{task_id}/flow",
+        params={"database_url": database_url},
+    ).json()
+    assert flow_after_approve["status"] != "PENDING_SUGGESTION"
+    assert flow_after_approve["suggestion"] is None
+
+    suggestions_response = client.get(
+        "/suggestions",
+        params={"task_id": task_id, "database_url": database_url},
+    )
+    assert suggestions_response.json()["count"] == 1
+    assert suggestions_response.json()["suggestions"][0]["status"] == "ACCEPTED"
+
+    missing_conversation_response = client.post(
+        "/conversations/does-not-exist/escalate",
+        json={"content": "hi", "database_url": database_url},
+    )
+    assert missing_conversation_response.status_code == 404
 
 
 def test_api_local_flow_and_observability_endpoints(tmp_path) -> None:
@@ -246,6 +444,64 @@ def test_api_local_flow_and_observability_endpoints(tmp_path) -> None:
     )
 
 
+def test_api_metrics_summary_endpoint_aggregates(tmp_path) -> None:
+    (tmp_path / ".git").mkdir()
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "INDEX.md").write_text("# Project\n\nUseful context.", encoding="utf-8")
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    client = TestClient(app)
+
+    flow_response = client.post(
+        "/flows/local",
+        json={
+            "project_root": str(tmp_path),
+            "context_path": "docs/INDEX.md",
+            "title": "Metrics summary flow",
+            "database_url": database_url,
+            "approve_suggestion": True,
+        },
+    )
+    assert flow_response.status_code == 200
+    flow_payload = flow_response.json()
+
+    summary_response = client.get(
+        "/metrics/summary",
+        params={
+            "database_url": database_url,
+            "project_id": flow_payload["project_id"],
+            "name": "execution.success",
+            "group_by": "role,action",
+        },
+    )
+    assert summary_response.status_code == 200
+    summary_payload = summary_response.json()
+    assert summary_payload["count"] == 1
+    bucket = summary_payload["summaries"][0]
+    assert bucket["name"] == "execution.success"
+    assert bucket["count"] == 1
+    assert bucket["sum"] == 1.0
+    assert bucket["dimensions"] == {"role": "TASK_PLANNER", "action": "PLAN"}
+
+    unfiltered_response = client.get(
+        "/metrics/summary",
+        params={"database_url": database_url, "project_id": flow_payload["project_id"]},
+    )
+    assert unfiltered_response.status_code == 200
+    names = {summary["name"] for summary in unfiltered_response.json()["summaries"]}
+    assert "execution.success" in names
+    assert "execution.duration" in names
+
+    invalid_group_by_response = client.get(
+        "/metrics/summary",
+        params={
+            "database_url": database_url,
+            "group_by": "not_a_real_field",
+        },
+    )
+    assert invalid_group_by_response.status_code == 400
+
+
 def test_api_project_endpoints_cover_discovery_security_and_operations(tmp_path) -> None:
     (tmp_path / ".git").mkdir()
     (tmp_path / "README.md").write_text("# Project", encoding="utf-8")
@@ -416,13 +672,59 @@ def test_api_project_endpoints_cover_discovery_security_and_operations(tmp_path)
     assert policy_blocked_response.json()["reason"] == "suggested_mode_requires_approval"
 
 
+def test_api_automatic_policy_get_and_put_round_trip(tmp_path) -> None:
+    client = TestClient(app)
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+
+    default_response = client.get(
+        "/policies/automatic",
+        params={"database_url": database_url},
+    )
+    assert default_response.status_code == 200
+    assert default_response.json() == {
+        "allowed_operations": [{"role": "DEVELOPER", "action": "IMPLEMENT"}],
+        "allowed_cross_role_transitions": [],
+        "allow_model_substitution": False,
+        "allow_context_expansion": False,
+    }
+
+    put_response = client.put(
+        "/policies/automatic",
+        json={
+            "allowed_operations": [{"role": "DEVELOPER", "action": "IMPLEMENT"}],
+            "allowed_cross_role_transitions": [
+                {"previous_role": "DEVELOPER", "next_role": "QUALITY_AGENT"}
+            ],
+            "allow_model_substitution": True,
+            "allow_context_expansion": False,
+            "database_url": database_url,
+        },
+    )
+    assert put_response.status_code == 200
+    assert put_response.json() == {
+        "allowed_operations": [{"role": "DEVELOPER", "action": "IMPLEMENT"}],
+        "allowed_cross_role_transitions": [
+            {"previous_role": "DEVELOPER", "next_role": "QUALITY_AGENT"}
+        ],
+        "allow_model_substitution": True,
+        "allow_context_expansion": False,
+    }
+
+    get_after_put_response = client.get(
+        "/policies/automatic",
+        params={"database_url": database_url},
+    )
+    assert get_after_put_response.status_code == 200
+    assert get_after_put_response.json() == put_response.json()
+
+
 def test_api_health_endpoint_reports_version() -> None:
     client = TestClient(app)
 
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "0.1.11"}
+    assert response.json() == {"status": "ok", "version": "0.2.0"}
 
 
 def test_api_direct_task_and_execution_lifecycle_endpoints(tmp_path) -> None:
@@ -575,6 +877,86 @@ def test_api_direct_task_and_execution_lifecycle_endpoints(tmp_path) -> None:
     assert resolved_context_response.status_code == 200
     assert resolved_context_response.json()["count"] == 1
     assert resolved_context_response.json()["items"][0]["reference"]["resource"] == "README.md"
+
+
+def test_api_cancel_execution_endpoint_transitions_to_cancelled(tmp_path) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "README.md").write_text("Project docs", encoding="utf-8")
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    client = TestClient(app)
+
+    project_id = client.post(
+        "/projects",
+        json={"project_root": str(tmp_path), "database_url": database_url},
+    ).json()["project_id"]
+    task_id = client.post(
+        "/tasks",
+        json={
+            "title": "Cancel target",
+            "description": "Created through API",
+            "requested_change": "N/A",
+            "project_id": project_id,
+            "execution_mode": "SUGGESTED",
+            "database_url": database_url,
+        },
+    ).json()["task_id"]
+    client.post(
+        f"/tasks/{task_id}/transition",
+        json={"target_state": "PLANNING", "database_url": database_url},
+    )
+    authorization_id = client.post(
+        "/authorizations/request",
+        json={
+            "task_id": task_id,
+            "role": "DEVELOPER",
+            "action": "IMPLEMENT",
+            "reason": "Need execution authorization",
+            "requester": "api-test",
+            "execution_mode": "SUGGESTED",
+            "model_id": "local-demo",
+            "context_scope": ["README.md"],
+            "database_url": database_url,
+        },
+    ).json()["authorization_id"]
+    client.post(
+        f"/authorizations/{authorization_id}/decision",
+        json={
+            "status": "GRANTED",
+            "decided_by": "api-manager",
+            "reason": "Approved",
+            "database_url": database_url,
+        },
+    )
+    execution_id = client.post(
+        "/executions/request",
+        json={
+            "task_id": task_id,
+            "role": "DEVELOPER",
+            "action": "IMPLEMENT",
+            "model_id": "local-demo",
+            "authorization_id": authorization_id,
+            "project_id": project_id,
+            "requested_context": ["README.md"],
+            "authorized_context": ["README.md"],
+            "database_url": database_url,
+        },
+    ).json()["execution_id"]
+
+    cancel_response = client.post(
+        f"/executions/{execution_id}/cancel",
+        json={"database_url": database_url},
+    )
+
+    assert cancel_response.status_code == 200
+    assert cancel_response.json()["state"] == "CANCELLED"
+    assert cancel_response.json()["available_transitions"] == []
+
+    already_terminal_response = client.post(
+        f"/executions/{execution_id}/cancel",
+        json={"database_url": database_url},
+    )
+    assert already_terminal_response.status_code == 200
+    assert already_terminal_response.json()["state"] == "CANCELLED"
 
 
 def test_api_run_execution_endpoint_drives_execution_engine(tmp_path) -> None:
@@ -1558,6 +1940,41 @@ def test_api_enforced_rejects_a_user_missing_the_required_permission(
         "/providers/settings", headers={"Authorization": f"Bearer {access_token}"}
     )
     assert authenticated_only_response.status_code == 200
+
+
+def test_api_enforced_rejects_writing_automatic_policy_without_manage_permission(
+    monkeypatch, tmp_path
+) -> None:
+    """`policies:manage` is a distinct permission from `policies:evaluate` --
+    a user with neither can read nor write the automatic policy."""
+
+    database_url = f"sqlite:///{tmp_path / 'identity.db'}"
+    monkeypatch.setenv("ORCHAI_DATABASE_URL", database_url)
+    monkeypatch.setenv("ORCHAI_AUTH_SECRET_KEY", _TEST_SECRET_KEY)
+    monkeypatch.setenv("ORCHAI_AUTH_ENFORCED", "true")
+    _create_user(
+        username="scoped", password="correct horse battery", is_superuser=False
+    )
+    client = TestClient(app)
+
+    access_token = client.post(
+        "/auth/login",
+        json={"username": "scoped", "password": "correct horse battery"},
+    ).json()["access_token"]
+
+    put_response = client.put(
+        "/policies/automatic",
+        json={"database_url": database_url},
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert put_response.status_code == 403
+
+    get_response = client.get(
+        "/policies/automatic",
+        params={"database_url": database_url},
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert get_response.status_code == 403
 
 
 # ---------------------------------------------------------------------------

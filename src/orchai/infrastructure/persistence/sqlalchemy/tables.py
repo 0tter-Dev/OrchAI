@@ -252,3 +252,46 @@ project_connections_table = Table(
     Column("user_id", Text, primary_key=True),
     Column("connected_at", Text, nullable=False),
 )
+
+# --- Conversations (ADR-014) --------------------------------------------
+# A bounded context independent of tasks/executions -- see
+# domain/conversations/entities.py. `module_id` has no FK: modules are a
+# code-defined vocabulary (ADR-015), not a database table.
+conversations_table = Table(
+    "conversations",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("module_id", Text, nullable=False),
+    Column("project_id", Text, ForeignKey("projects.id")),
+    Column("title", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("archived", Integer, nullable=False),
+)
+
+messages_table = Table(
+    "messages",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("conversation_id", Text, ForeignKey("conversations.id"), nullable=False),
+    Column("role", Text, nullable=False),
+    Column("content", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("error", Text),
+    Column("provider_name", Text, nullable=False),
+    Column("model_id", Text),
+    Column("linked_task_id", Text, ForeignKey("tasks.id")),
+    Column("linked_execution_id", Text, ForeignKey("executions.id")),
+    Column("resource_usage", Text, nullable=False),
+)
+
+automatic_policy_table = Table(
+    "automatic_policy",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("allowed_operations", Text, nullable=False),
+    Column("allowed_cross_role_transitions", Text, nullable=False),
+    Column("allow_model_substitution", Integer, nullable=False),
+    Column("allow_context_expansion", Integer, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)

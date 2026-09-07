@@ -12,6 +12,7 @@ from sqlalchemy import delete, insert, select, update
 from orchai.application.audit.ports import AuditRepository
 from orchai.application.authorization.ports import AuthorizationRepository
 from orchai.application.context.ports import ContextResolutionRepository
+from orchai.application.conversations.ports import ConversationRepository, MessageRepository
 from orchai.application.events.ports import EventRepository
 from orchai.application.executions.ports import ExecutionRepository
 from orchai.application.identity.ports import (
@@ -27,7 +28,10 @@ from orchai.application.identity.ports import (
 from orchai.application.identity.ports import (
     UserRepository as IdentityUserRepository,
 )
+from orchai.application.metrics.aggregation import summarize_records
 from orchai.application.metrics.ports import MetricsRepository
+from orchai.application.policies.ports import AutomaticPolicyRepository
+from orchai.application.policies.service import AutomaticExecutionPolicy
 from orchai.application.projects.ports import (
     ProjectConnectionRepository,
     ProjectRepository,
@@ -49,6 +53,7 @@ from orchai.domain.context import (
     ContextResolutionRecord,
     ContextSource,
 )
+from orchai.domain.conversations import Conversation, Message, MessageRole, MessageStatus
 from orchai.domain.events import DomainEvent, EventType
 from orchai.domain.executions import (
     Execution,
@@ -63,11 +68,14 @@ from orchai.domain.identifiers import (
     AuthorizationId,
     CausationId,
     ContextResolutionId,
+    ConversationId,
     CorrelationId,
     EventId,
     ExecutionId,
+    MessageId,
     MetricRecordId,
     ModelId,
+    ModuleId,
     PermissionId,
     ProjectId,
     RefreshTokenId,
@@ -76,7 +84,7 @@ from orchai.domain.identifiers import (
     UserId,
 )
 from orchai.domain.identity import AccessRole, Permission, RefreshToken, User
-from orchai.domain.metrics import MetricRecord
+from orchai.domain.metrics import MetricRecord, MetricSummary
 from orchai.domain.projects import (
     Project,
     ProjectReadinessLevel,
@@ -92,9 +100,12 @@ from orchai.infrastructure.persistence.sqlalchemy.tables import (
     audit_records_table,
     authorization_decisions_table,
     authorization_requests_table,
+    automatic_policy_table,
     context_resolution_records_table,
+    conversations_table,
     events_table,
     executions_table,
+    messages_table,
     metric_records_table,
     permissions_table,
     project_connections_table,
@@ -158,6 +169,111 @@ class SQLAlchemyTaskRepository(TaskRepository):
         with self._database.engine.begin() as connection:
             rows = connection.execute(query).all()
         return tuple(_task_from_row(row._mapping) for row in rows)
+
+
+class SQLAlchemyConversationRepository(ConversationRepository):
+    """SQLAlchemy-backed conversation repository (ADR-014)."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add(self, conversation: Conversation) -> None:
+        await self.save(conversation)
+
+    async def get(self, conversation_id: ConversationId) -> Conversation:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(conversations_table).where(
+                    conversations_table.c.id == str(conversation_id)
+                )
+            ).first()
+        if row is None:
+            raise LookupError(str(conversation_id))
+        return _conversation_from_row(row._mapping)
+
+    async def save(self, conversation: Conversation) -> None:
+        values = _conversation_to_values(conversation)
+        with self._database.engine.begin() as connection:
+            exists = connection.execute(
+                select(conversations_table.c.id).where(
+                    conversations_table.c.id == values["id"]
+                )
+            ).first()
+            if exists is None:
+                connection.execute(insert(conversations_table).values(**values))
+            else:
+                connection.execute(
+                    update(conversations_table)
+                    .where(conversations_table.c.id == values["id"])
+                    .values(**values)
+                )
+
+    async def list(
+        self,
+        *,
+        module_id: ModuleId | None = None,
+        project_id: ProjectId | None = None,
+        limit: int = 20,
+    ) -> tuple[Conversation, ...]:
+        query = select(conversations_table).order_by(conversations_table.c.created_at.desc())
+        if module_id is not None:
+            query = query.where(conversations_table.c.module_id == str(module_id))
+        if project_id is not None:
+            query = query.where(conversations_table.c.project_id == str(project_id))
+        query = query.limit(_normalize_limit(limit))
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_conversation_from_row(row._mapping) for row in rows)
+
+
+class SQLAlchemyMessageRepository(MessageRepository):
+    """SQLAlchemy-backed message repository (ADR-014)."""
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def add(self, message: Message) -> None:
+        await self.save(message)
+
+    async def get(self, message_id: MessageId) -> Message:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(messages_table).where(messages_table.c.id == str(message_id))
+            ).first()
+        if row is None:
+            raise LookupError(str(message_id))
+        return _message_from_row(row._mapping)
+
+    async def save(self, message: Message) -> None:
+        values = _message_to_values(message)
+        with self._database.engine.begin() as connection:
+            exists = connection.execute(
+                select(messages_table.c.id).where(messages_table.c.id == values["id"])
+            ).first()
+            if exists is None:
+                connection.execute(insert(messages_table).values(**values))
+            else:
+                connection.execute(
+                    update(messages_table)
+                    .where(messages_table.c.id == values["id"])
+                    .values(**values)
+                )
+
+    async def list(
+        self,
+        *,
+        conversation_id: ConversationId,
+        limit: int = 100,
+    ) -> tuple[Message, ...]:
+        query = (
+            select(messages_table)
+            .where(messages_table.c.conversation_id == str(conversation_id))
+            .order_by(messages_table.c.created_at.asc())
+            .limit(_normalize_limit(limit))
+        )
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        return tuple(_message_from_row(row._mapping) for row in rows)
 
 
 class SQLAlchemyProjectRepository(ProjectRepository):
@@ -618,6 +734,70 @@ class SQLAlchemyMetricsRepository(MetricsRepository):
         with self._database.engine.begin() as connection:
             rows = connection.execute(query).all()
         return tuple(_metric_record_from_row(row._mapping) for row in rows)
+
+    async def summarize(
+        self,
+        *,
+        project_id: ProjectId | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        name: str | None = None,
+        group_by: tuple[str, ...] = (),
+    ) -> tuple[MetricSummary, ...]:
+        # `dimensions` is opaque JSON, not real columns, so grouping by
+        # role/action/model_id/outcome happens in Python (summarize_records)
+        # after filtering on the columns that *are* real: project_id, name,
+        # and the observed_at time window.
+        query = select(metric_records_table)
+        if project_id is not None:
+            query = query.where(metric_records_table.c.project_id == str(project_id))
+        if name is not None:
+            query = query.where(metric_records_table.c.name == name)
+        if since is not None:
+            query = query.where(metric_records_table.c.observed_at >= since.isoformat())
+        if until is not None:
+            query = query.where(metric_records_table.c.observed_at <= until.isoformat())
+        with self._database.engine.begin() as connection:
+            rows = connection.execute(query).all()
+        records = tuple(_metric_record_from_row(row._mapping) for row in rows)
+        return summarize_records(records, group_by=group_by)
+
+
+class SQLAlchemyAutomaticPolicyRepository(AutomaticPolicyRepository):
+    """SQLAlchemy-backed singleton store for the automatic-mode policy."""
+
+    _SINGLETON_ID = "default"
+
+    def __init__(self, database: SQLAlchemyDatabase) -> None:
+        self._database = database
+
+    async def get(self) -> AutomaticExecutionPolicy:
+        with self._database.engine.begin() as connection:
+            row = connection.execute(
+                select(automatic_policy_table).where(
+                    automatic_policy_table.c.id == self._SINGLETON_ID
+                )
+            ).first()
+        if row is None:
+            return AutomaticExecutionPolicy()
+        return _automatic_policy_from_row(row._mapping)
+
+    async def set(self, policy: AutomaticExecutionPolicy) -> None:
+        values = _automatic_policy_to_values(policy)
+        with self._database.engine.begin() as connection:
+            exists = connection.execute(
+                select(automatic_policy_table.c.id).where(
+                    automatic_policy_table.c.id == self._SINGLETON_ID
+                )
+            ).first()
+            if exists is None:
+                connection.execute(insert(automatic_policy_table).values(**values))
+            else:
+                connection.execute(
+                    update(automatic_policy_table)
+                    .where(automatic_policy_table.c.id == self._SINGLETON_ID)
+                    .values(**values)
+                )
 
 
 class SQLAlchemySuggestionRepository(SuggestionRepository):
@@ -1218,6 +1398,24 @@ def _metric_record_to_values(record: MetricRecord) -> dict[str, Any]:
     }
 
 
+def _automatic_policy_to_values(policy: AutomaticExecutionPolicy) -> dict[str, Any]:
+    return {
+        "id": "default",
+        "allowed_operations": _to_json(
+            [[role.value, action.value] for role, action in policy.allowed_operations]
+        ),
+        "allowed_cross_role_transitions": _to_json(
+            [
+                [previous.value, next_role.value]
+                for previous, next_role in policy.allowed_cross_role_transitions
+            ]
+        ),
+        "allow_model_substitution": policy.allow_model_substitution,
+        "allow_context_expansion": policy.allow_context_expansion,
+        "updated_at": datetime.now(UTC).isoformat(),
+    }
+
+
 def _suggestion_to_values(suggestion: Suggestion) -> dict[str, Any]:
     return {
         "id": str(suggestion.id),
@@ -1445,6 +1643,66 @@ def _execution_from_row(row: Mapping[str, Any]) -> Execution:
     return execution
 
 
+def _conversation_to_values(conversation: Conversation) -> dict[str, Any]:
+    return {
+        "id": str(conversation.id),
+        "module_id": str(conversation.module_id),
+        "project_id": str(conversation.project_id) if conversation.project_id else None,
+        "title": conversation.title,
+        "created_at": conversation.created_at.isoformat(),
+        "archived": int(conversation.archived),
+    }
+
+
+def _conversation_from_row(row: Mapping[str, Any]) -> Conversation:
+    return Conversation(
+        id=ConversationId(row["id"]),
+        module_id=ModuleId(row["module_id"]),
+        project_id=ProjectId(row["project_id"]) if row["project_id"] else None,
+        title=row["title"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        archived=bool(row["archived"]),
+    )
+
+
+def _message_to_values(message: Message) -> dict[str, Any]:
+    return {
+        "id": str(message.id),
+        "conversation_id": str(message.conversation_id),
+        "role": message.role.value,
+        "content": message.content,
+        "created_at": message.created_at.isoformat(),
+        "status": message.status.value,
+        "error": message.error,
+        "provider_name": message.provider_name,
+        "model_id": str(message.model_id) if message.model_id else None,
+        "linked_task_id": str(message.linked_task_id) if message.linked_task_id else None,
+        "linked_execution_id": str(message.linked_execution_id)
+        if message.linked_execution_id
+        else None,
+        "resource_usage": _to_json(_resource_usage_to_dict(message.resource_usage)),
+    }
+
+
+def _message_from_row(row: Mapping[str, Any]) -> Message:
+    return Message(
+        id=MessageId(row["id"]),
+        conversation_id=ConversationId(row["conversation_id"]),
+        role=MessageRole(row["role"]),
+        content=row["content"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        status=MessageStatus(row["status"]),
+        error=row["error"],
+        provider_name=row["provider_name"],
+        model_id=ModelId(row["model_id"]) if row["model_id"] else None,
+        linked_task_id=TaskId(row["linked_task_id"]) if row["linked_task_id"] else None,
+        linked_execution_id=ExecutionId(row["linked_execution_id"])
+        if row["linked_execution_id"]
+        else None,
+        resource_usage=_resource_usage_from_dict(_from_json(row["resource_usage"])),
+    )
+
+
 def _event_from_row(row: Mapping[str, Any]) -> DomainEvent:
     return DomainEvent(
         event_id=EventId(row["id"]),
@@ -1515,6 +1773,21 @@ def _metric_record_from_row(row: Mapping[str, Any]) -> MetricRecord:
         project_id=ProjectId(row["project_id"]) if row["project_id"] else None,
         execution_id=ExecutionId(row["execution_id"]) if row["execution_id"] else None,
         dimensions=_from_json(row["dimensions"]),
+    )
+
+
+def _automatic_policy_from_row(row: Mapping[str, Any]) -> AutomaticExecutionPolicy:
+    return AutomaticExecutionPolicy(
+        allowed_operations=tuple(
+            (RoleName(role), ActionName(action))
+            for role, action in _from_json(row["allowed_operations"])
+        ),
+        allowed_cross_role_transitions=tuple(
+            (RoleName(previous), RoleName(next_role))
+            for previous, next_role in _from_json(row["allowed_cross_role_transitions"])
+        ),
+        allow_model_substitution=bool(row["allow_model_substitution"]),
+        allow_context_expansion=bool(row["allow_context_expansion"]),
     )
 
 

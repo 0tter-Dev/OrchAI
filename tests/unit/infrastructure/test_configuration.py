@@ -60,20 +60,20 @@ def test_load_settings_normalizes_postgresql_url_for_sqlalchemy(monkeypatch) -> 
 
 
 def test_load_settings_reads_ai_provider_and_api_options(monkeypatch) -> None:
-    monkeypatch.setenv("ORCHAI_AI_PROVIDER", "openai")
+    monkeypatch.setenv("ORCHAI_AI_PROVIDER", "litellm")
     monkeypatch.setenv("ORCHAI_AI_BASE_URL", "https://api.openai.com/v1")
     monkeypatch.setenv("ORCHAI_AI_API_KEY", "secret")
-    monkeypatch.setenv("ORCHAI_AI_MODEL", "gpt-5-codex")
+    monkeypatch.setenv("ORCHAI_AI_MODEL", "openai/gpt-5")
     monkeypatch.setenv("ORCHAI_AI_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv("ORCHAI_API_HOST", "0.0.0.0")
     monkeypatch.setenv("ORCHAI_API_PORT", "9000")
 
     settings = load_settings()
 
-    assert settings.ai_provider.provider == "openai"
+    assert settings.ai_provider.provider == "litellm"
     assert settings.ai_provider.base_url == "https://api.openai.com/v1"
     assert settings.ai_provider.api_key == "secret"
-    assert settings.ai_provider.model == "gpt-5-codex"
+    assert settings.ai_provider.model == "openai/gpt-5"
     assert settings.ai_provider.timeout_seconds == 45.0
     assert settings.api.host == "0.0.0.0"
     assert settings.api.port == 9000

@@ -244,13 +244,22 @@ unit of work.
 
 ## 9. Future Considerations
 
-- **Streaming:** `GET /requests/{id}/flow` may be extended with
-  Server-Sent Events (SSE) or WebSocket streaming when real-time
-  progress is required.
-- **Session continuity:** A future `session_id` parameter may group
-  multiple Requests into a conversation thread.
-- **Model discovery:** `GET /providers/models` will allow the chat
-  interface to populate the model selector dynamically.
-- **Authentication:** The request boundary is the natural place to
-  introduce per-user or per-client API keys when multi-tenant operation
-  is needed.
+- **Streaming:** resolved by ADR-013 --- `AIProviderPort` gains
+  `execute_stream()`, and the new `/conversations/{id}/messages`
+  endpoint (ADR-014) streams via SSE. `GET /requests/{id}/flow` itself
+  remains a read-only, non-streaming snapshot.
+- **Session continuity:** resolved by ADR-014 --- rather than a
+  `session_id` parameter on `/requests`, a new, independent
+  `Conversation`/`Message` bounded context groups multi-turn chat, with
+  explicit-only escalation of a message to a `/requests` call. See
+  `docs/decisions/ADR-014-CONVERSATION-DOMAIN-MODEL.md`.
+- **Model discovery:** still open. `GET /providers/models` (or an
+  equivalent) to let a client populate the model selector dynamically
+  remains unimplemented; ADR-013's adoption of LiteLLM makes this more
+  valuable, since the set of usable models grows with LiteLLM's own
+  provider coverage.
+- **Authentication:** resolved differently than anticipated here ---
+  ADR-012 implemented persisted users/permissions/JWT for the CLI and
+  API generally, and ADR-016 defines how OrchAI Desktop specifically
+  uses that layer (attribution only, no enforcement, single local
+  user) rather than per-user API keys at the request boundary.

@@ -1,6 +1,6 @@
 [project]
 name = "orchai"
-version = "0.1.11"
+version = "0.2.0"
 description = "Generic AI-assisted software development orchestration system."
 readme = "README.md"
 license = "MIT"
@@ -9,6 +9,7 @@ dependencies = [
     "argon2-cffi>=23.1",
     "fastapi>=0.116",
     "httpx>=0.28",
+    "litellm>=1.55",
     "pydantic>=2.11",
     "psycopg[binary]>=3.2",
     "pyjwt>=2.9",
@@ -16,6 +17,12 @@ dependencies = [
     "typer>=0.16",
     "uvicorn>=0.35",
 ]
+
+[project.optional-dependencies]
+# OrchAI Desktop shell (ADR-017) — a separate deployment shape from the
+# headless CLI/API. Not part of the core dependency set: the backend
+# must remain fully usable (and testable) without a GUI toolkit.
+desktop = ["pywebview>=5.3"]
 
 [project.scripts]
 orchai = "orchai.interfaces.cli.main:app"
@@ -34,7 +41,14 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-cache_dir = ".pytest_cache/orchai"
+# Not the pytest default (".pytest_cache"): that exact directory in this
+# repository checkout has a broken ACL (created under a different
+# Windows account/session context) that denies access -- including
+# listing, renaming, or deleting it -- to every account tested since,
+# always producing "PytestCacheWarning: could not create cache path ...
+# Acesso negado" on every run. A fresh, never-before-used directory name
+# sidesteps it entirely rather than fighting the ACL.
+cache_dir = ".cache/pytest"
 
 [tool.ruff]
 line-length = 88

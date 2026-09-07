@@ -7,6 +7,10 @@ from orchai.infrastructure.persistence.in_memory_authorizations import (
 from orchai.infrastructure.persistence.in_memory_context import (
     InMemoryContextResolutionRepository,
 )
+from orchai.infrastructure.persistence.in_memory_conversations import (
+    InMemoryConversationRepository,
+    InMemoryMessageRepository,
+)
 from orchai.infrastructure.persistence.in_memory_events import InMemoryEventRepository
 from orchai.infrastructure.persistence.in_memory_executions import (
     InMemoryExecutionRepository,
@@ -19,6 +23,9 @@ from orchai.infrastructure.persistence.in_memory_identity import (
     InMemoryUserRepository,
 )
 from orchai.infrastructure.persistence.in_memory_metrics import InMemoryMetricsRepository
+from orchai.infrastructure.persistence.in_memory_policies import (
+    InMemoryAutomaticPolicyRepository,
+)
 from orchai.infrastructure.persistence.in_memory_projects import (
     InMemoryProjectConnectionRepository,
     InMemoryProjectRepository,
@@ -32,10 +39,13 @@ from orchai.infrastructure.persistence.sqlalchemy import (
     SQLAlchemyAccessRoleRepository,
     SQLAlchemyAuditRepository,
     SQLAlchemyAuthorizationRepository,
+    SQLAlchemyAutomaticPolicyRepository,
     SQLAlchemyContextResolutionRepository,
+    SQLAlchemyConversationRepository,
     SQLAlchemyDatabase,
     SQLAlchemyEventRepository,
     SQLAlchemyExecutionRepository,
+    SQLAlchemyMessageRepository,
     SQLAlchemyMetricsRepository,
     SQLAlchemyPermissionRepository,
     SQLAlchemyProjectConnectionRepository,
@@ -51,9 +61,12 @@ __all__ = [
     "InMemoryAccessRoleRepository",
     "InMemoryAuditRepository",
     "InMemoryAuthorizationRepository",
+    "InMemoryAutomaticPolicyRepository",
     "InMemoryContextResolutionRepository",
+    "InMemoryConversationRepository",
     "InMemoryEventRepository",
     "InMemoryExecutionRepository",
+    "InMemoryMessageRepository",
     "InMemoryMetricsRepository",
     "InMemoryPermissionRepository",
     "InMemoryProjectConnectionRepository",
@@ -66,10 +79,13 @@ __all__ = [
     "SQLAlchemyAccessRoleRepository",
     "SQLAlchemyAuditRepository",
     "SQLAlchemyAuthorizationRepository",
+    "SQLAlchemyAutomaticPolicyRepository",
     "SQLAlchemyContextResolutionRepository",
+    "SQLAlchemyConversationRepository",
     "SQLAlchemyDatabase",
     "SQLAlchemyEventRepository",
     "SQLAlchemyExecutionRepository",
+    "SQLAlchemyMessageRepository",
     "SQLAlchemyMetricsRepository",
     "SQLAlchemyPermissionRepository",
     "SQLAlchemyProjectConnectionRepository",

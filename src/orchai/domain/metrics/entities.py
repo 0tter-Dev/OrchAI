@@ -40,3 +40,24 @@ class MetricRecord:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "unit", unit)
         object.__setattr__(self, "dimensions", MappingProxyType(dict(self.dimensions)))
+
+
+@dataclass(frozen=True, slots=True)
+class MetricSummary:
+    """Aggregated count/sum/avg over a group of `MetricRecord`s sharing a name.
+
+    `dimensions` here holds only the group-by key/value pairs that produced
+    this bucket (e.g. `{"role": "DEVELOPER"}`) -- a strict subset of a raw
+    `MetricRecord.dimensions`, not the full set every underlying record
+    carried.
+    """
+
+    name: str
+    unit: str
+    count: int
+    sum: float
+    avg: float
+    dimensions: Mapping[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "dimensions", MappingProxyType(dict(self.dimensions)))

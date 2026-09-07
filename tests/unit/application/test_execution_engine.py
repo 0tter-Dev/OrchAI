@@ -1,5 +1,10 @@
 import asyncio
 
+from orchai.application.authorization import (
+    DecideAuthorizationCommand,
+    RequestAuthorizationCommand,
+)
+from orchai.application.executions import RequestExecutionCommand
 from orchai.application.executions.ports import (
     AIProviderError,
     AIProviderExecutionRequest,
@@ -12,11 +17,18 @@ from orchai.application.orchestration.orchestrator import (
     AutomaticExecutionPolicy,
     RunTaskWorkflowStageCommand,
 )
+from orchai.application.projects import RegisterProjectCommand
+from orchai.application.tasks import CreateTaskCommand, TransitionTaskCommand
 from orchai.bootstrap import build_in_memory_runtime
 from orchai.domain.actions import ActionName
-from orchai.domain.identifiers import TaskId
+from orchai.domain.authorization import AuthorizationDecisionStatus
+from orchai.domain.capabilities import CapabilityName
+from orchai.domain.executions import ExecutionState
+from orchai.domain.identifiers import ModelId, TaskId
+from orchai.domain.projects import ProjectReadinessLevel, ProjectSecurityProfile
 from orchai.domain.roles import RoleName
-from orchai.domain.tasks import ExecutionMode
+from orchai.domain.tasks import ExecutionMode, TaskState
+from orchai.infrastructure.projects import LocalFilesystemProjectAdapter
 
 
 def test_execution_engine_invokes_provider_after_authorization(tmp_path) -> None:
@@ -300,6 +312,200 @@ def test_execution_engine_maps_provider_validation_error_to_failed_execution(tmp
         assert {metric.name for metric in metrics} >= {"execution.failure"}
 
     asyncio.run(run())
+
+
+async def _authorized_execution(runtime, tmp_path):
+    """Build one execution through to AUTHORIZED, ready for run()/cancel()."""
+
+    project = await runtime.project_service.register_project(
+        RegisterProjectCommand(
+            name="Cancel target",
+            root_location=str(tmp_path),
+            capabilities=(CapabilityName.READ_PROJECT,),
+            readiness_level=ProjectReadinessLevel.LEVEL_1_CHANGEABLE,
+            security_profile=ProjectSecurityProfile(
+                readiness_level=ProjectReadinessLevel.LEVEL_1_CHANGEABLE,
+                access_scope=("READ_PROJECT",),
+            ),
+        )
+    )
+    await runtime.project_adapters.register(
+        project.id, LocalFilesystemProjectAdapter(tmp_path)
+    )
+    task = await runtime.task_service.create_task(
+        CreateTaskCommand(
+            title="Cancel target task",
+            description="Verify execution cancellation.",
+            requested_change="N/A.",
+            project_id=project.id,
+            execution_mode=ExecutionMode.SUGGESTED,
+        )
+    )
+    task = await runtime.task_service.transition_task(
+        TransitionTaskCommand(task_id=task.id, target_state=TaskState.PLANNING)
+    )
+    authorization = await runtime.authorization_service.request_authorization(
+        RequestAuthorizationCommand(
+            task_id=task.id,
+            role=RoleName.DEVELOPER,
+            action=ActionName.IMPLEMENT,
+            model_id=ModelId("fake-model"),
+            context_scope=(),
+            reason="Cancellation test.",
+            requester="test",
+            execution_mode=ExecutionMode.SUGGESTED,
+        )
+    )
+    authorization = await runtime.authorization_service.decide_authorization(
+        DecideAuthorizationCommand(
+            authorization_id=authorization.id,
+            status=AuthorizationDecisionStatus.GRANTED,
+            decided_by="test",
+            reason="Approved.",
+        )
+    )
+    return await runtime.execution_service.request_execution(
+        RequestExecutionCommand(
+            task_id=task.id,
+            role=RoleName.DEVELOPER,
+            action=ActionName.IMPLEMENT,
+            model_id=ModelId("fake-model"),
+            authorization_id=authorization.id,
+            project_id=project.id,
+            requested_context=(),
+            authorized_context=(),
+        )
+    )
+
+
+def test_execution_engine_cancel_stops_a_dispatched_in_flight_execution(tmp_path) -> None:
+    """`.dispatch()` (used by `POST /executions/{id}/dispatch`, unlike the
+    orchestrator's own synchronous `.run()` call) tracks a real
+    `asyncio.Task` -- cancelling it must interrupt the provider call in
+    flight and still leave the execution in a terminal, persisted CANCELLED
+    state (not stuck RUNNING), since `asyncio.CancelledError` bypasses
+    `run()`'s own `except Exception` handler.
+    """
+
+    async def run() -> None:
+        provider = SlowProvider()
+        runtime = build_in_memory_runtime(ai_provider=provider)
+        execution = await _authorized_execution(runtime, tmp_path)
+
+        dispatched_task = runtime.execution_engine.dispatch(execution.id)
+        await asyncio.wait_for(provider.started.wait(), timeout=1)
+        assert runtime.execution_engine.is_active(execution.id) is True
+
+        cancelled = await runtime.execution_engine.cancel(execution.id)
+
+        assert cancelled.state is ExecutionState.CANCELLED
+        # The dispatched asyncio.Task itself ends in the cancelled state
+        # (CancelledError propagates out of run() uncaught) once the event
+        # loop actually gets to process the cancellation -- the repository
+        # writes above never truly suspend, so nothing forces that to
+        # happen until we explicitly await the task here.
+        try:
+            await asyncio.wait_for(dispatched_task, timeout=1)
+        except asyncio.CancelledError:
+            pass
+        assert dispatched_task.cancelled()
+        persisted = await runtime.execution_service.get_execution(execution.id)
+        assert persisted.state is ExecutionState.CANCELLED
+
+    asyncio.run(run())
+
+
+def test_execution_engine_cancel_transitions_a_non_dispatched_execution(tmp_path) -> None:
+    """An execution that was never `.dispatch()`-ed (e.g. still AUTHORIZED,
+    no tracked asyncio.Task) has no live task to interrupt, but cancel()
+    must still transition it to CANCELLED directly."""
+
+    async def run() -> None:
+        runtime = build_in_memory_runtime(ai_provider=RecordingProvider())
+        execution = await _authorized_execution(runtime, tmp_path)
+        assert runtime.execution_engine.is_active(execution.id) is False
+
+        cancelled = await runtime.execution_engine.cancel(execution.id)
+
+        assert cancelled.state is ExecutionState.CANCELLED
+
+    asyncio.run(run())
+
+
+def test_execution_engine_cancel_is_idempotent_once_terminal(tmp_path) -> None:
+    """Cancelling an already-terminal execution (e.g. a second cancel call)
+    must not raise -- it is treated as a no-op, returning the execution as
+    it stands rather than propagating InvalidExecutionStateTransitionError.
+    """
+
+    async def run() -> None:
+        runtime = build_in_memory_runtime(ai_provider=RecordingProvider())
+        execution = await _authorized_execution(runtime, tmp_path)
+        first_cancel = await runtime.execution_engine.cancel(execution.id)
+        assert first_cancel.state is ExecutionState.CANCELLED
+
+        second_cancel = await runtime.execution_engine.cancel(execution.id)
+
+        assert second_cancel.state is ExecutionState.CANCELLED
+
+    asyncio.run(run())
+
+
+def test_execution_engine_cancel_swallows_a_provider_cancel_error(tmp_path) -> None:
+    """A provider's best-effort `.cancel()` failing (e.g. LiteLLM's earlier
+    behavior of raising) must never block the authoritative state
+    transition to CANCELLED."""
+
+    async def run() -> None:
+        runtime = build_in_memory_runtime(ai_provider=CancelRaisingProvider())
+        execution = await _authorized_execution(runtime, tmp_path)
+
+        cancelled = await runtime.execution_engine.cancel(execution.id)
+
+        assert cancelled.state is ExecutionState.CANCELLED
+
+    asyncio.run(run())
+
+
+class SlowProvider(AIProviderPort):
+    """Never completes on its own -- only cancellation ends it."""
+
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+
+    async def capabilities(self) -> frozenset[str]:
+        return frozenset({"execute", "validate_request"})
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        return None
+
+    async def execute(
+        self,
+        request: AIProviderExecutionRequest,
+    ) -> AIProviderExecutionResult:
+        self.started.set()
+        await asyncio.sleep(3600)
+        raise AssertionError("should have been cancelled before this point")
+
+    async def cancel(self, execution_id) -> None:
+        return None
+
+
+class CancelRaisingProvider(AIProviderPort):
+    async def capabilities(self) -> frozenset[str]:
+        return frozenset({"execute", "validate_request"})
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        return None
+
+    async def execute(
+        self,
+        request: AIProviderExecutionRequest,
+    ) -> AIProviderExecutionResult:
+        raise AssertionError("execute should not be called in this test")
+
+    async def cancel(self, execution_id) -> None:
+        raise AIProviderError("provider does not support cancellation")
 
 
 class RecordingProvider(AIProviderPort):

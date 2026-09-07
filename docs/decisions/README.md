@@ -52,4 +52,9 @@ ADR-009  External Project Content Ownership
 ADR-010  Project Readiness and Security Gates
 ADR-011  Chat-First Request Interface
 ADR-012  Authentication and Access Control for the CLI and API
+ADR-013  LiteLLM Provider Adapter and Streaming Execution
+ADR-014  Conversation and Message Domain Model
+ADR-015  Module Concept (Forge, Studio, and Future Modules)
+ADR-016  Single Local User Identity for OrchAI Desktop
+ADR-017  Desktop Application Shell
 ```

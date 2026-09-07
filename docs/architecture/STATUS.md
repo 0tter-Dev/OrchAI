@@ -45,7 +45,8 @@ The following have initial implementation validation:
 -   initial policy boundary kept separate from authorization decisions;
 -   async Execution Engine dispatch through a provider-independent
     `AIProviderPort`;
--   stub AI provider adapter and local Ollama adapter boundary;
+-   stub AI provider adapter and the multi-provider `litellm` adapter
+    boundary (ADR-013);
 -   provider-result contract validation and boundary-classified failure
     mapping;
 -   filesystem Project Adapter discovery and authorized context reads;

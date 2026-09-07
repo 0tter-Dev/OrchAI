@@ -28,8 +28,15 @@ async def collect_runtime_status(
         )
     if not provider_health.reachable:
         warnings.append("Configured AI provider is not reachable.")
-    if settings.ai_provider.provider == "openai" and settings.ai_provider.api_key is None:
-        warnings.append("OpenAI provider selected without ORCHAI_AI_API_KEY configured.")
+    if (
+        settings.ai_provider.provider == "litellm"
+        and not settings.ai_provider.model.startswith("ollama/")
+        and settings.ai_provider.api_key is None
+    ):
+        warnings.append(
+            "litellm provider selected with a non-local model but without "
+            "ORCHAI_AI_API_KEY configured."
+        )
 
     ready = database_status["reachable"] and provider_health.reachable
     if settings.database.is_sqlite:
