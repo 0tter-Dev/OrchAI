@@ -1,258 +1,260 @@
-# OrchAI — Relatório de Status dos Endpoints da API (v0.1.11)
+# OrchAI — API Endpoints Status Report (v0.1.11)
 
-## Como ler este relatório
+## How to read this report
 
-Este documento é um raio-x objetivo do que a API HTTP (`src/orchai/interfaces/api/main.py`) realmente faz hoje, verificado por leitura direta do código, pela suíte de testes (124 testes, unitários e de integração) e por chamadas reais rodadas agora contra a API para confirmar os pontos mais sutis. Não é um documento arquitetural (isso já existe em `docs/architecture/API-UI-BOUNDARY.md`) — é um checkpoint de "o que está implementado e funciona" antes de avançarmos para os adapters de IA reais.
+This document is an objective x-ray of what the HTTP API (`src/orchai/interfaces/api/main.py`) actually does today, verified by direct code reading, the test suite (124 tests, unit and integration), and real calls run just now against the API to confirm the subtler points. It is not an architectural document (that already exists in `docs/architecture/API-UI-BOUNDARY.md`) — it is a checkpoint of "what is implemented and works" before moving on to real AI provider adapters.
 
-> **Atualização v0.1.5:** a seção 9 descrevia uma "surpresa" em `POST /requests` — o estágio PLAN acontecia de forma síncrona e sem gate de política, então a primeira sugestão que o cliente via já era `IMPLEMENT`. Isso não era uma nuance de implementação: contrariava o que `docs/architecture/CHAT-FIRST-REQUEST-MODEL.md` (seção 3) e o invariante nº2 da ADR-011 já especificavam. Foi corrigido nessa sessão.
+> **v0.1.5 update:** section 9 described a "surprise" in `POST /requests` — the PLAN stage happened synchronously and without a policy gate, so the first suggestion the client saw was already `IMPLEMENT`. This wasn't an implementation nuance: it contradicted what `docs/architecture/CHAT-FIRST-REQUEST-MODEL.md` (section 3) and ADR-011's invariant #2 already specified. Fixed in this session.
 
-> **Atualização v0.1.6:** `POST /requests/{id}/approve` passou a resolver o caso comum de `PENDING_SUGGESTION` — quando não existe nenhuma autorização pendente (o caso normal em modo `SUGGESTED` após o gate do PLAN), o endpoint delega internamente para o mesmo mecanismo gated usado por `/advance` (`approve_stage: true`), em vez de sempre responder `no_pending_authorization`. Isso não é um bypass: a chamada delegada ainda passa pela mesma avaliação de política. Ver seção 9.
+> **v0.1.6 update:** `POST /requests/{id}/approve` now resolves the common `PENDING_SUGGESTION` case — when there is no pending authorization (the normal case in `SUGGESTED` mode after the PLAN gate), the endpoint internally delegates to the same gated mechanism used by `/advance` (`approve_stage: true`), instead of always responding `no_pending_authorization`. This is not a bypass: the delegated call still goes through the same policy evaluation. See section 9.
 
-> **Atualização v0.1.7:** `POST /admin/db/create` e `POST /admin/db/migrate` (e os comandos CLI equivalentes `orchai db create`/`orchai db migrate`) foram **removidos** — `db sync` (`POST /admin/db/sync`, `orchai db sync`) é agora a única operação padrão de administração de banco, cobrindo os dois casos num só passo (cria o banco se necessário — só PostgreSQL, pulado sem erro em SQLite/local-flow — e em seguida aplica as migrações incondicionalmente). Ver seção 2. Esta sessão também sincronizou este relatório e o restante da documentação com o estado real e completo do repositório (a sessão anterior operava sobre uma cópia parcial do projeto, faltando dezenas de documentos e 18 arquivos de teste unitário) — ver `docs/STATUS.md` para o relato completo, incluindo 8 testes unitários pré-existentes que só vieram à tona nesta sincronização e foram corrigidos para refletir o gate do PLAN da v0.1.5.
+> **v0.1.7 update:** `POST /admin/db/create` and `POST /admin/db/migrate` (and the equivalent CLI commands `orchai db create`/`orchai db migrate`) were **removed** — `db sync` (`POST /admin/db/sync`, `orchai db sync`) is now the only standard database administration operation, covering both cases in a single step (creates the database if needed — PostgreSQL only, skipped without error on SQLite/local-flow — then applies migrations unconditionally). See section 2. This session also synchronized this report and the rest of the documentation with the real, complete state of the repository (the previous session had operated on a partial copy of the project, missing dozens of documents and 18 unit test files) — see `docs/STATUS.md` for the full account, including 8 pre-existing unit tests that only surfaced during this synchronization and were fixed to reflect the v0.1.5 PLAN gate.
 
-> **Atualização v0.1.8:** `infrastructure/persistence/sqlite/` e `infrastructure/persistence/postgresql/` foram unificadas em `infrastructure/persistence/db/` (migrações agora em `infrastructure/persistence/db/migrations/*.sql`, aplicadas do mesmo jeito idempotente descrito na seção 2). Nenhum comportamento de endpoint mudou. Ver `docs/STATUS.md` para o relato completo, incluindo a implementação isolada da Fase 1 de Identidade e Controle de Acesso (`docs/TO-DO.md` Prioridade 1) — ainda sem nenhuma rota ou comando exposto.
+> **v0.1.8 update:** `infrastructure/persistence/sqlite/` and `infrastructure/persistence/postgresql/` were unified into `infrastructure/persistence/db/` (migrations now live under `infrastructure/persistence/db/migrations/*.sql`, applied the same idempotent way described in section 2). No endpoint behavior changed. See `docs/STATUS.md` for the full account, including the isolated implementation of Identity and Access Control Phase 1 (`docs/TO-DO.md` Priority 1) — still with no route or command exposed.
 
-> **Atualização v0.1.9:** Fase 2 de Identidade e Controle de Acesso implementada (`docs/TO-DO.md` Prioridade 1): emissão/validação de access tokens JWT (`JWTAccessTokenIssuer`) e hashing de refresh tokens via SHA-256 (`Sha256RefreshTokenHasher`), além de `login()` / `refresh()` (rotação single-use) / `logout()` (idempotente) em `IdentityService`. Nenhum comportamento de endpoint mudou — continua sem nenhuma rota `/auth/*` ou comando CLI expostos; isso é Fase 3.
+> **v0.1.9 update:** Identity and Access Control Phase 2 implemented (`docs/TO-DO.md` Priority 1): JWT access-token issuance/validation (`JWTAccessTokenIssuer`) and SHA-256 refresh-token hashing (`Sha256RefreshTokenHasher`), plus `login()` / `refresh()` (single-use rotation) / `logout()` (idempotent) on `IdentityService`. No endpoint behavior changed — still no `/auth/*` route or CLI command exposed; that is Phase 3.
 
-> **Atualização v0.1.10:** Fase 3 de Identidade e Controle de Acesso implementada — a fase que finalmente muda comportamento em runtime. Três rotas novas, `POST /auth/login` / `POST /auth/refresh` / `POST /auth/logout` (seção 11), mais os comandos `orchai auth login` / `orchai auth logout` / `orchai auth bootstrap-admin`. Toda rota pré-existente (50 das 54 rotas da aplicação, fora as 3 novas de `/auth/*` e as 4 de docs/openapi) e todo comando CLI pré-existente (46 dos 49 comandos — só `auth login`, `auth bootstrap-admin` e `api serve` ficam de fora, o primeiro e o segundo por serem o próprio caminho de bootstrap, e `api serve` por não ter uma rota HTTP correspondente) agora passa por uma checagem de permissão declarativa — `require_permission(key)` (dependency do FastAPI) e `require_cli_permission(key)` (chamada explícita no início do corpo do comando, não decorator, para não quebrar a introspecção de assinatura do Typer/Click) — mas essa checagem é **inerte por padrão**: `ORCHAI_AUTH_ENFORCED=false` é o padrão de rollout (`docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §6), então nenhum comportamento de nenhum endpoint/comando pré-existente mudou para quem não ligar a flag. Com a flag ligada, um bearer token JWT válido passa a ser exigido (401 se ausente/inválido), e a permissão específica de cada rota/comando passa a ser exigida (403 se ausente) — superusuários (`is_superuser`) sempre passam. Ver seção 11 para a lista completa de rotas de autenticação e `docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §4 para o mapeamento completo de permissões. Suíte agora com **178 testes**.
+> **v0.1.10 update:** Identity and Access Control Phase 3 implemented — the phase that finally changes runtime behavior. Three new routes, `POST /auth/login` / `POST /auth/refresh` / `POST /auth/logout` (section 11), plus the `orchai auth login` / `orchai auth logout` / `orchai auth bootstrap-admin` commands. Every pre-existing route (50 of the application's 54 routes, excluding the 3 new `/auth/*` ones and the 4 docs/openapi routes) and every pre-existing CLI command (46 of 49 commands — only `auth login`, `auth bootstrap-admin`, and `api serve` are excluded, the first two because they are the bootstrap path itself, and `api serve` because it has no corresponding HTTP route) now goes through a declarative permission check — `require_permission(key)` (a FastAPI dependency) and `require_cli_permission(key)` (an explicit call at the start of the command body, not a decorator, so as not to break Typer/Click's signature introspection) — but this check is **inert by default**: `ORCHAI_AUTH_ENFORCED=false` is the rollout default (`docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §6), so no pre-existing endpoint/command behavior changed for anyone who doesn't flip the flag. With the flag on, a valid JWT bearer token becomes required (401 if missing/invalid), and each route/command's specific permission becomes required (403 if missing) — superusers (`is_superuser`) always pass. See section 11 for the full list of authentication routes and `docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §4 for the full permission mapping. Suite now at **178 tests**.
 
-> **Atualização v0.1.11:** Fase 4 de Identidade e Controle de Acesso implementada — a camada de CRUD de configuração de usuários pedida explicitamente pelo usuário como pré-requisito antes de partir para a "refatoração para usuários" mais ampla. Sete rotas novas: `GET`/`POST /admin/users`, `PUT /admin/users/{id}/access-roles`, `GET`/`POST /admin/access-roles`, `PUT /admin/access-roles/{id}/permissions`, `GET /admin/projects` (seção 12), mais `GET`/`PATCH /me` e `GET /me/projects` (também seção 12). Comandos CLI equivalentes: `orchai users list|create|set-access-roles`, `orchai access-roles list|create|set-permissions`, `orchai projects list-all`, `orchai me show|update|projects`. O modelo `AccessRole` N:N (Fase 1) não mudou em nada — em vez disso, criar um usuário não-superusuário agora exige informar ao menos um `AccessRoleId` (substituindo um design anterior de "AccessRole Padrão do sistema" que o usuário pediu para simplificar). Uma nova tabela puramente informativa, `project_connections` (migração `0008_project_connections.sql`), registra qual usuário conectou qual projeto — **não** é um limite de controle de acesso. `POST /projects` passou a vincular automaticamente o usuário autenticado quando há um token válido, mudança feita capturando o retorno de `require_permission` em vez de descartá-lo — a única alteração de comportamento em uma rota pré-existente nesta fase, e mesmo assim não muda a checagem de permissão nem o formato de resposta para quem já usava a rota. Esta fase também corrigiu uma lacuna latente: `permissions`/`access_roles` começavam vazias num banco novo, sem nenhum seeding em lugar nenhum do código — hoje o catálogo completo de permissões é semeado automaticamente e de forma idempotente a cada construção do identity runtime. Ver `docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §8 para o design completo. Suíte agora com **203 testes**.
+> **v0.1.11 update:** Identity and Access Control Phase 4 implemented — the user-configuration CRUD layer the user explicitly requested as a prerequisite before moving on to the broader "user-based refactor." Seven new routes: `GET`/`POST /admin/users`, `PUT /admin/users/{id}/access-roles`, `GET`/`POST /admin/access-roles`, `PUT /admin/access-roles/{id}/permissions`, `GET /admin/projects` (section 12), plus `GET`/`PATCH /me` and `GET /me/projects` (also section 12). Equivalent CLI commands: `orchai users list|create|set-access-roles`, `orchai access-roles list|create|set-permissions`, `orchai projects list-all`, `orchai me show|update|projects`. The N:N `AccessRole` model (Phase 1) didn't change at all — instead, creating a non-superuser now requires supplying at least one `AccessRoleId` (replacing an earlier "system Default AccessRole" design the user asked to simplify away). A new, purely informational table, `project_connections` (migration `0008_project_connections.sql`), records which user connected which project — this is **not** an access-control boundary. `POST /projects` now automatically links the authenticated user when a valid token is present, a change made by capturing `require_permission`'s return value instead of discarding it — the only behavior change to a pre-existing route in this phase, and even so it doesn't change the permission check or response shape for anyone already using the route. This phase also fixed a latent gap: `permissions`/`access_roles` started empty in a fresh database, with no seeding anywhere in the code — today the full permission catalog is seeded automatically and idempotently on every identity-runtime build. See `docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §8 for the full design. Suite now at **203 tests**.
 
-Legenda de status:
+> **Note (v0.2.0):** This report was last fully verified against `v0.1.11`, before the OrchAI Desktop initiative (ADR-013 through ADR-017) and its Phase 7 hardening landed. Two concrete examples of what's now stale: the execution-cancellation gap (section 7, "Known gaps" item 1) and the metrics-aggregation gap ("Known gaps" item 2) are both resolved as of `v0.2.0`, via `POST /executions/{id}/cancel` and `GET /metrics/summary`; the provider adapters this report still calls "the real Ollama/OpenAI/Anthropic adapters" (end of the usage example) were replaced by the single LiteLLM adapter back in ADR-013, before the Desktop initiative even started. The new `/modules`, `/conversations`, and `GET`/`PUT /policies/automatic` endpoints aren't documented here at all yet. See `docs/TO-DO.md`'s "Current Implementation Sequence" for what shipped since. The rest of this report is kept as a historical snapshot as of `v0.1.11` until a fuller re-audit lands as its own roadmap item.
 
-- **✅ Completo** — funciona fim a fim como documentado, coberto por teste de integração.
-- **⚠️ Parcial** — o endpoint responde e faz algo real, mas não cobre todo o comportamento que o nome sugere (detalhado na coluna de ações).
-- **🚧 Não implementado** — não existe endpoint algum; mencionado aqui só para deixar explícito o que falta.
+Status legend:
 
-A API é dividida em duas superfícies (ADR-011): `/requests/*` é a superfície **chat-first**, pensada como ponto de entrada principal para clientes externos (chat UIs, apps). Os demais grupos (`/tasks`, `/authorizations`, `/executions`, etc.) são a superfície **operacional**, de controle fino — usada tanto por operadores/scripts quanto internamente pela própria superfície chat-first.
+- **✅ Complete** — works end to end as documented, covered by an integration test.
+- **⚠️ Partial** — the endpoint responds and does something real, but doesn't cover all the behavior its name suggests (detailed in the actions column).
+- **🚧 Not implemented** — no endpoint exists at all; mentioned here only to make the gap explicit.
 
----
-
-## 1. Sistema e Providers
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
-|---|---|---|---|
-| `GET /` | ✅ | Índice da API | Lista os pontos de entrada principais e o dialeto de banco recomendado (postgresql). Não toca banco de dados. |
-| `GET /health` | ✅ | Health check simples | Retorna `{"status": "ok", "version": "0.1.11"}`. Não valida banco nem provider. |
-| `GET /settings/runtime` | ✅ | Diagnóstico de configuração | Mostra a configuração efetiva resolvida (banco, provider de IA, host/porta da API) — útil para confirmar qual banco/URL está realmente em uso antes de operar. |
-| `GET /runtime/check` | ✅ | Diagnóstico consolidado | Testa conectividade real com o banco (`SELECT 1`) e healthcheck do provider de IA configurado, retornando `ready: true/false` e avisos (`warnings`) quando algo não está pronto para produção. |
-| `GET /providers/settings` | ✅ | Configuração do provider de IA | Mostra qual provider está configurado (`stub` ou `litellm`), modelo, timeout, se a API key está presente — sem expor a chave em si. |
-| `GET /providers/capabilities` | ✅ | Capacidades declaradas | Lista as capacidades que o provider afirma suportar. Desde a ADR-013, o provider `litellm` é a única implementação real (cobre OpenAI, Anthropic, Gemini, Ollama e outros runtimes compatíveis com a API da OpenAI através de um único adapter); `stub` continua disponível para smoke tests locais. |
-| `GET /providers/health` | ✅ | Healthcheck do provider | Faz uma checagem de alcançabilidade real contra o provider configurado. |
-
-## 2. Administração de Banco
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
-|---|---|---|---|
-| `POST /admin/db/sync` | ✅ | **Única operação de administração de banco** | Desde v0.1.7, é o único endpoint de administração de banco — `POST /admin/db/create` e `POST /admin/db/migrate` foram removidos. Cria o banco se necessário (só tem efeito real em PostgreSQL, via `CREATE DATABASE`, validando antes se já existe) e em seguida aplica as migrações SQL versionadas incondicionalmente (`infrastructure/persistence/db/migrations/*.sql`, idempotente, registra versão em `schema_migrations`). Em SQLite/local-flow o passo de criação é apenas pulado — `create_status: "skipped_non_postgresql"`, com uma mensagem explícita de que a operação não se aplica ao banco/local-flow selecionado — **sem erro**; as migrações são aplicadas normalmente. Equivalente ao comando CLI `orchai db sync`, que tem o mesmo comportamento informativo (não gera erro/exit code != 0 para SQLite). |
-
-## 3. Projetos
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
-|---|---|---|---|
-| `GET /projects/discover` | ✅ | Exploração pontual (sem persistir) | Varre um diretório local e lista recursos (arquivos) classificados, sem gravar nada no banco. Útil para "olhar antes de conectar". |
-| `GET /projects/readiness` | ✅ | Avaliação pontual (sem persistir) | Avalia o nível de prontidão de um diretório (`LEVEL_0`..`LEVEL_3`, baseado em ter `.git`, testes, CI) sem persistir. |
-| `GET /projects/security` | ✅ | Avaliação pontual (sem persistir) | Deriva o perfil de segurança observado (o que pode ser lido/persistido/compartilhado com provider) a partir do disco, sem persistir. |
-| `POST /projects` | ✅ | **Conectar um projeto** | Este é o passo que efetivamente registra o projeto: avalia prontidão/segurança do diretório e persiste um registro de `Project` no banco, retornando `project_id`. É o ponto de partida real de qualquer fluxo. |
-| `GET /projects` | ✅ | Listar projetos conectados | Lista projetos já registrados no banco. |
-| `GET /projects/lookup` | ✅ | Encontrar projeto por caminho | Busca um projeto já registrado pelo `project_root`, evitando registrar duplicado. |
-| `GET /projects/{project_id}` | ✅ | Detalhe de um projeto | Retorna o registro persistido, incluindo níveis de prontidão/segurança efetivos vs. observados. |
-| `PATCH /projects/{project_id}/security` | ✅ | Ajustar política de segurança | Permite elevar/restringir manualmente o perfil de segurança efetivo de um projeto (ex: liberar compartilhamento com provider de nuvem), independente do que foi observado no disco. |
-
-## 4. Tarefas (Tasks)
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
-|---|---|---|---|
-| `POST /tasks` | ✅ | Criar uma tarefa | Cria uma `Task` vinculada a um projeto, em estado `CREATED`, com o `execution_mode` desejado (`MANUAL`/`SUGGESTED`/`AUTOMATIC`). |
-| `GET /tasks` | ✅ | Listar tarefas | Lista com filtro por projeto e estado. |
-| `GET /tasks/{task_id}` | ✅ | Detalhe de uma tarefa | Estado atual + transições disponíveis a partir dali (máquina de estados). |
-| `GET /tasks/{task_id}/snapshot` | ✅ | Visão consolidada | Junta autorizações, execuções, sugestões, eventos, auditoria e métricas de uma tarefa em uma única resposta — é a base do `GET /requests/{id}/flow`. |
-| `POST /tasks/{task_id}/transition` | ✅ | Transição manual de estado | Move a tarefa para outro estado da máquina de estados diretamente (uso operacional/administrativo, não passa por sugestão nem autorização). |
-| `POST /tasks/{task_id}/advance` | ✅ | **Avançar um estágio do workflow** | Este é o motor real do fluxo: PLAN → IMPLEMENT → REVIEW → VALIDATE → TEST → DOCUMENT. Cada chamada resolve automaticamente qual é o próximo estágio (via `SuggestionEngine`), avalia política, e se `approve_stage: true`, solicita+concede autorização e executa a etapa via o provider de IA configurado. |
-
-## 5. Políticas
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
-|---|---|---|---|
-| `POST /policies/evaluate` | ✅ | Simular uma decisão de política | Avalia se uma operação seria permitida (sem executar nada), útil para debug/dry-run. **Importante:** isto é só avaliação — não existe endpoint para *configurar* os limites da política em runtime (ver seção "Lacunas conhecidas" abaixo). |
-
-## 6. Autorizações
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
-|---|---|---|---|
-| `POST /authorizations/request` | ✅ | Solicitar autorização | Cria um registro de autorização pendente (sem decisão) para um `role`+`action` sobre uma tarefa. |
-| `POST /authorizations/{id}/decision` | ✅ | Decidir uma autorização | Grava uma decisão explícita (`GRANTED`/`REJECTED`/`EXPIRED`/`REVOKED`). É o único jeito de uma autorização deixar de estar "pendente". |
-| `GET /authorizations` | ✅ | Listar/filtrar autorizações | Suporta filtro por `task_id`, `status` e `pending_only` (adicionado nesta sessão — antes só filtrava por `task_id`). |
-| `GET /authorizations/{id}` | ✅ | Detalhe de uma autorização | Estado, decisão mais recente, escopo de contexto solicitado. |
-
-## 7. Execuções
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
-|---|---|---|---|
-| `POST /executions/request` | ✅ | Criar uma execução autorizada | Vincula uma execução a uma autorização já concedida — não roda nada ainda. |
-| `POST /executions/{id}/run` | ✅ | **Executar de forma síncrona** | Roda a execução até o fim (chama o provider de IA, resolve resultado) e só responde quando termina. |
-| `POST /executions/{id}/dispatch` | ✅ | **Executar de forma assíncrona** | Agenda a execução como uma tarefa asyncio em background e responde imediatamente com `dispatched: true`; o cliente consulta `GET /executions/{id}` depois para ver quando chega a `COMPLETED`. Validado com teste de polling. |
-| `POST /executions/{id}/transition` | ✅ | Transição manual de estado | Move a execução manualmente entre estados (`PREPARING`, `STARTED`, `RUNNING`, etc.) — uso operacional/debug. |
-| `POST /executions/{id}/complete` | ✅ | Registrar resultado manualmente | Fecha uma execução com resultado/erros/uso de recursos explícitos, sem passar pelo provider de IA — usado por integrações externas ou testes. |
-| `POST /executions/{id}/resolve-context` | ✅ | Resolver contexto autorizado | Materializa o conteúdo dos arquivos autorizados (ex: lê o `README.md` do disco) e persiste um registro de resolução. |
-| `GET /executions/{id}/context` | ✅ | Ver contexto já resolvido | Lista os registros de resolução de contexto de uma execução. |
-| `GET /executions` / `GET /executions/{id}` | ✅ | Listar/detalhar execuções | Com filtro por tarefa, projeto e estado. |
-| — (cancelamento) | 🚧 | — | **Não existe.** Há um método `cancel()` declarado na interface (`ExecutionRepository` port) mas nenhuma classe o implementa e nenhum endpoint o chama. Tecnicamente dá para forçar `POST /executions/{id}/transition` com `target_state: CANCELLED` (a máquina de estados aceita esse alvo), mas isso só troca o status no banco — **não interrompe** uma execução já despachada em background via `dispatch`. |
-
-## 8. Observabilidade (Auditoria, Métricas, Eventos, Sugestões)
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
-|---|---|---|---|
-| `GET /audit` | ✅ | Trilha de auditoria | Lista registros de auditoria (quem fez o quê, quando, com qual resultado), gerados automaticamente a cada evento de domínio relevante. Agora inclui `correlation_id`/`causation_id`. |
-| `GET /audit/{id}` | ✅ | Detalhe de um registro | Adicionado nesta sessão. |
-| `GET /events` | ✅ | Histórico de eventos de domínio | Lista eventos brutos (`TASK_CREATED`, `EXECUTION_COMPLETED`, etc.), com filtro por tipo/tarefa/execução/projeto. |
-| `GET /metrics` | ⚠️ | Registros de métricas brutos | Lista registros individuais gerados automaticamente por execução (ex: `execution.success`, tokens, custo). **Não há agregação** — nenhum endpoint calcula soma/média/taxa de sucesso ao longo do tempo; quem quiser um dashboard precisa agregar do lado do cliente com os registros brutos. |
-| — (agregação de métricas) | 🚧 | — | **Não existe.** O `MetricsRepository` só tem `add_many`/`list` — nenhum método de agregação, nem no domínio nem na infraestrutura. |
-| `GET /suggestions` | ✅ | Listar sugestões | Com filtro por tarefa. |
-| `GET /suggestions/{id}` | ✅ | Detalhe de uma sugestão | Adicionado nesta sessão. |
-| `POST /tasks/{task_id}/suggestions` | ✅ | Gerar sugestão sob demanda | Adicionado nesta sessão — antes só era gerada automaticamente dentro do `advance`/`local-flow`. |
-| `POST /suggestions/{id}/accept` | ✅ | Aceitar uma sugestão | Adicionado nesta sessão. Importante: isso só marca o registro como `ACCEPTED` — **não** dispara autorização nem execução por si só (isso continua acontecendo apenas dentro do `advance`, ver nota na seção 9). |
-| `POST /suggestions/{id}/reject` | ✅ | Rejeitar uma sugestão | Adicionado nesta sessão. |
-
-## 9. Superfície Chat-First (`/requests/*`) — entrada principal
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
-|---|---|---|---|
-| `POST /requests` | ✅ | **Criar um pedido em linguagem natural** | Recebe `project_root` + `prompt` (+ opcionalmente `role`/`action`/`model`). Registra o projeto (idempotente, por `root_location`), cria a tarefa e avança por **exatamente um estágio gated** — PLAN, o primeiro. Corrigido nesta sessão: antes, o estágio PLAN acontecia de forma síncrona e sem gate nenhum, e a primeira sugestão que o cliente via já era `IMPLEMENT` (task já em `PLANNED`) — um desvio real do que a documentação especifica, não uma nuance. Hoje a primeira sugestão é sempre `PLAN`/`TASK_PLANNER`, avaliada pela mesma política de qualquer outro estágio: em modo `SUGGESTED` (padrão) sem `approve_suggestion: true`, a chamada para em `PLANNING` com a sugestão `PRESENTED` e `blocked_reason: "suggested_mode_requires_approval"` — nenhuma autorização é criada. Com `approve_suggestion: true`, o estágio PLAN roda de verdade (autorização concedida + execução) e a tarefa para em `PLANNED`, pronta para o próximo `advance`. Confirmado empiricamente (não só por leitura de código) rodando a chamada de verdade. |
-| `GET /requests/{id}/flow` | ✅ | **Observar o estado completo** | Visão unificada (tarefa + autorizações + execuções + sugestões + auditoria + métricas), com um campo `status` derivado (`PENDING_SUGGESTION`, `PENDING_AUTHORIZATION`, `RUNNING`, `COMPLETED`, etc.) — corrigido nesta sessão (ver nota abaixo). |
-| `POST /requests/{id}/approve` | ✅ | **Aprovar e continuar, cobrindo os dois casos possíveis** | Reavaliado e corrigido em v0.1.6. Cobre dois casos: (1) já existe uma autorização pendente/não-decidida (ex: criada por fora via `POST /authorizations/request` direto contra a tarefa) — é concedida diretamente, como antes; (2) o caso comum em modo `SUGGESTED`, onde `run_task_workflow_stage` retorna antes de criar qualquer autorização quando a política bloqueia, deixando só a sugestão `PRESENTED` — agora, se não houver autorização pendente mas houver uma sugestão `PRESENTED`, `/approve` delega internamente para o mesmo mecanismo gated de `/advance` (`approve_stage: true`). Não é um bypass: a chamada delegada ainda passa pela mesma avaliação de política, e se ela recusar (ex: modo/config mudou), a resposta volta com `blocked_reason` preenchido e `approved: false`, exatamente como `/advance` reportaria. Como consequência, `/approve` aceita opcionalmente os mesmos campos de contexto que `/advance` (`context_paths`, `documentation_path`, `test_args`, `model`, `provider_target`) — necessários apenas quando o estágio atual os exige (ex: PLAN exige `context_paths`); são ignorados quando o caso (1) se aplica. |
-| `POST /requests/{id}/advance` | ✅ | **Avançar para o próximo estágio** | Equivalente chat-first de `POST /tasks/{task_id}/advance` — é este endpoint, chamado com `approve_stage: true`, que efetivamente faz a tarefa progredir (PLAN → IMPLEMENT → REVIEW → ...), concedendo autorização e executando via o provider configurado. |
-
-## 10. Fluxos legados (mantidos por compatibilidade)
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
-|---|---|---|---|
-| `POST /flows/local` | ✅ | Fluxo local de demonstração | Precursor do `/requests` — usa exatamente o mesmo mecanismo interno (`run_local_flow`), então herda a mesma correção: cria projeto+tarefa e avança só o primeiro estágio gated (PLAN), não pula direto para uma execução completa. Mantido por compatibilidade. |
-| `POST /projects/operations` | ✅ | Operação protegida no projeto | Executa uma operação específica no Project Adapter (ler, escrever, rodar comando/teste) via política+autorização, fora do ciclo PLAN→...→DOCUMENT. A tarefa criada aqui ainda precisa passar por `PLANNED` antes de iniciar a operação (exigência mecânica da máquina de estados) — esse hop também foi corrigido nesta sessão para passar pelo mesmo gate de sugestão/política (papel `TASK_PLANNER`/ação `PLAN`), em vez de acontecer sem nenhum registro. Um único `approve_operation: true` cobre tanto esse bootstrap quanto a operação em si. |
+The API is split into two surfaces (ADR-011): `/requests/*` is the **chat-first** surface, meant as the primary entry point for external clients (chat UIs, apps). The other groups (`/tasks`, `/authorizations`, `/executions`, etc.) are the **operational**, fine-grained-control surface — used both by operators/scripts and internally by the chat-first surface itself.
 
 ---
 
-## 11. Autenticação (ADR-012, Fase 3)
+## 1. System and Providers
 
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
+| Endpoint | Status | Role in the flow | What it actually does |
 |---|---|---|---|
-| `POST /auth/login` | ✅ | **Autenticar** | Troca `username`/`password` por um par access/refresh token. `401` para credenciais inválidas ou usuário inativo. Não exige autenticação prévia — é o ponto de entrada. Equivalente CLI: `orchai auth login`, que persiste o par de tokens em `~/.orchai/credentials.json` (permissão `0600`). |
-| `POST /auth/refresh` | ✅ | **Renovar sessão** | Troca um refresh token válido por um novo par access/refresh (rotação single-use — o token usado é invalidado no mesmo passo). `401` para token ausente, expirado, inválido ou já usado. |
-| `POST /auth/logout` | ✅ | **Encerrar sessão** | Revoga um refresh token (idempotente — chamar de novo não é erro). Exige autenticação (qualquer usuário válido), sem permissão específica. Equivalente CLI: `orchai auth logout`, que também limpa `~/.orchai/credentials.json`. |
-| `orchai auth bootstrap-admin` | ✅ | **Criar o primeiro superusuário** | Sem rota HTTP equivalente (ADR-012 §8) — resolve o problema do ovo e da galinha: só funciona enquanto existir zero usuários no banco, sem exigir um chamador já autenticado. Username/senha vêm de `--username`/`--password` ou de `ORCHAI_ADMIN_USERNAME`/`ORCHAI_ADMIN_PASSWORD`. |
+| `GET /` | ✅ | API index | Lists the main entry points and the recommended database dialect (postgresql). Doesn't touch the database. |
+| `GET /health` | ✅ | Simple health check | Returns `{"status": "ok", "version": "0.1.11"}`. Doesn't validate the database or provider. |
+| `GET /settings/runtime` | ✅ | Configuration diagnostics | Shows the effective resolved configuration (database, AI provider, API host/port) — useful for confirming which database/URL is actually in use before operating. |
+| `GET /runtime/check` | ✅ | Consolidated diagnostics | Tests real database connectivity (`SELECT 1`) and the configured AI provider's healthcheck, returning `ready: true/false` and warnings when something isn't production-ready. |
+| `GET /providers/settings` | ✅ | AI provider configuration | Shows which provider is configured (`stub` or `litellm`), model, timeout, whether the API key is present — without exposing the key itself. |
+| `GET /providers/capabilities` | ✅ | Declared capabilities | Lists the capabilities the provider claims to support. Since ADR-013, the `litellm` provider is the only real implementation (covering OpenAI, Anthropic, Gemini, Ollama, and other OpenAI-API-compatible runtimes through a single adapter); `stub` remains available for local smoke tests. |
+| `GET /providers/health` | ✅ | Provider healthcheck | Performs a real reachability check against the configured provider. |
 
-Todas as demais rotas e comandos pré-existentes passaram a declarar uma permissão exigida (`require_permission(key)` / `require_cli_permission(key)`), mas essa checagem só é aplicada de fato quando `ORCHAI_AUTH_ENFORCED=true` — o padrão é `false` (inerte), preservando o comportamento de toda rota/comando documentado nas seções 1 a 10 acima para quem ainda não ligou a flag. O mapeamento completo de permissão por rota/comando está em `docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §4, não duplicado aqui. Um token de superusuário (`is_superuser`) sempre satisfaz qualquer permissão.
+## 2. Database Administration
 
-A gestão de usuários ganhou uma superfície própria na Fase 4 (seção 12) — `admin:manage_users` já não é uma permissão sem consumidor.
-
----
-
-## 12. Configuração de Usuários — Admin e Self-Service (ADR-012, Fase 4)
-
-| Endpoint | Status | Papel no fluxo | O que faz concretamente |
+| Endpoint | Status | Role in the flow | What it actually does |
 |---|---|---|---|
-| `GET /admin/users` | ✅ | **Listar todos os usuários** | Retorna todos os campos de cada usuário (username, email, is_superuser, is_active, timestamps, `access_roles` resolvidos por nome, `connected_project_ids`) — exceto `password_hash`, nunca exposto. Exige `admin:manage_users`. |
-| `POST /admin/users` | ✅ | **Criar um novo usuário** | Cria o usuário e já atribui seus `AccessRole`s iniciais (`role_ids`). Um usuário não-superusuário sem nenhum `role_id` é rejeitado com `400` (`UserRequiresAccessRoleError`) — substitui o design de "AccessRole Padrão do sistema" descartado pelo usuário por uma regra mais simples com a mesma garantia prática. Username duplicado → `409`. Exige `admin:manage_users`. |
-| `PUT /admin/users/{id}/access-roles` | ✅ | **Substituir os `AccessRole`s de um usuário** | Operação *replace-all*, não incremental: a lista enviada vira o conjunto completo. Esvaziar para zero é rejeitado (`400`) a menos que o usuário seja superusuário. Exige `admin:manage_users`. |
-| `GET /admin/access-roles` | ✅ | **Listar todos os `AccessRole`** | Cada item vem com `permissions` e `users` totalmente resolvidos (não apenas ids). Exige `admin:manage_users`. |
-| `POST /admin/access-roles` | ✅ | **Criar um `AccessRole`** | Nome duplicado → `409`. Reutiliza `IdentityService.create_access_role`, já testado desde a Fase 1. Exige `admin:manage_users`. |
-| `PUT /admin/access-roles/{id}/permissions` | ✅ | **Substituir o bundle de permissões de um `AccessRole`** | Também *replace-all*. `Permission` continua sendo um catálogo fixo do sistema — não há endpoint para criar novas permissões, só para (re)atribuí-las a um `AccessRole`. Exige `admin:manage_users`. |
-| `GET /admin/projects` | ✅ | **Diretório administrativo de projetos** | Lista todo projeto do sistema com `capabilities`, níveis de prontidão e `connected_user_ids` — diferente de `GET /projects` (`projects:read`), que lista projetos mas sem esses detalhes administrativos. Exige a nova permissão `admin:manage_projects`. |
-| `GET /me` | ✅ | **Ver o próprio perfil** | Retorna os mesmos campos de `GET /admin/users` para o usuário autenticado, incluindo `access_roles` e `connected_project_ids`. |
-| `PATCH /me` | ✅ | **Atualizar o próprio perfil** | Só aceita `username`/`email` — não existe campo para o usuário alterar seu próprio `AccessRole` ou `is_superuser`. Username duplicado → `409`. |
-| `GET /me/projects` | ✅ | **Projetos conectados pelo usuário logado** | Lê de `project_connections` (ver nota abaixo). |
+| `POST /admin/db/sync` | ✅ | **Only database administration operation** | Since v0.1.7, this is the only database administration endpoint — `POST /admin/db/create` and `POST /admin/db/migrate` were removed. Creates the database if needed (only has a real effect on PostgreSQL, via `CREATE DATABASE`, checking beforehand whether it already exists) and then applies the versioned SQL migrations unconditionally (`infrastructure/persistence/db/migrations/*.sql`, idempotent, recording the version in `schema_migrations`). On SQLite/local-flow the creation step is simply skipped — `create_status: "skipped_non_postgresql"`, with an explicit message that the operation doesn't apply to the selected database/local-flow — **without error**; migrations are applied normally. Equivalent to the `orchai db sync` CLI command, which has the same informative behavior (no error/non-zero exit code for SQLite). |
 
-**Importante sobre `/me`:** essas três rotas não usam `require_permission()` (que vira um no-op quando `ORCHAI_AUTH_ENFORCED=false`, deixando "qual é o usuário atual" indefinido). Usam uma dependency própria, `require_authenticated_user()` (`require_authenticated_cli_user()` no CLI), que **sempre** exige um bearer token válido, independente da flag — não existe uma leitura sensata de "no-op" para "mostrar meu próprio perfil".
+## 3. Projects
 
-**`project_connections` não é controle de acesso.** É uma referência puramente informativa — "este usuário conectou este projeto ao OrchAI" — que não restringe leitura, registro nem operação sobre nenhum projeto, e um projeto pode ser conectado por vários usuários. `POST /projects` agora vincula automaticamente o chamador autenticado (quando há um token válido) a esse registro. Vive no mesmo banco de `projects` (não no banco de identidade, que fica fixo por segurança), já que é metadado descritivo do projeto, não um dado de identidade.
+| Endpoint | Status | Role in the flow | What it actually does |
+|---|---|---|---|
+| `GET /projects/discover` | ✅ | One-off exploration (not persisted) | Scans a local directory and lists classified resources (files), without writing anything to the database. Useful for "look before connecting." |
+| `GET /projects/readiness` | ✅ | One-off assessment (not persisted) | Assesses a directory's readiness level (`LEVEL_0`..`LEVEL_3`, based on having `.git`, tests, CI) without persisting. |
+| `GET /projects/security` | ✅ | One-off assessment (not persisted) | Derives the observed security profile (what can be read/persisted/shared with a provider) from disk, without persisting. |
+| `POST /projects` | ✅ | **Connect a project** | This is the step that actually registers the project: assesses the directory's readiness/security and persists a `Project` record in the database, returning `project_id`. This is the real starting point of any flow. |
+| `GET /projects` | ✅ | List connected projects | Lists projects already registered in the database. |
+| `GET /projects/lookup` | ✅ | Find a project by path | Looks up an already-registered project by `project_root`, avoiding duplicate registration. |
+| `GET /projects/{project_id}` | ✅ | Project detail | Returns the persisted record, including effective vs. observed readiness/security levels. |
+| `PATCH /projects/{project_id}/security` | ✅ | Adjust security policy | Allows manually raising/restricting a project's effective security profile (e.g. allowing sharing with a cloud provider), independent of what was observed on disk. |
+
+## 4. Tasks
+
+| Endpoint | Status | Role in the flow | What it actually does |
+|---|---|---|---|
+| `POST /tasks` | ✅ | Create a task | Creates a `Task` linked to a project, in `CREATED` state, with the desired `execution_mode` (`MANUAL`/`SUGGESTED`/`AUTOMATIC`). |
+| `GET /tasks` | ✅ | List tasks | With filtering by project and state. |
+| `GET /tasks/{task_id}` | ✅ | Task detail | Current state + available transitions from there (state machine). |
+| `GET /tasks/{task_id}/snapshot` | ✅ | Consolidated view | Combines a task's authorizations, executions, suggestions, events, audit, and metrics into a single response — this is the basis of `GET /requests/{id}/flow`. |
+| `POST /tasks/{task_id}/transition` | ✅ | Manual state transition | Moves the task directly to another state machine state (operational/administrative use, doesn't go through suggestion or authorization). |
+| `POST /tasks/{task_id}/advance` | ✅ | **Advance one workflow stage** | This is the real engine of the flow: PLAN → IMPLEMENT → REVIEW → VALIDATE → TEST → DOCUMENT. Each call automatically resolves the next stage (via `SuggestionEngine`), evaluates policy, and if `approve_stage: true`, requests+grants authorization and executes the step via the configured AI provider. |
+
+## 5. Policies
+
+| Endpoint | Status | Role in the flow | What it actually does |
+|---|---|---|---|
+| `POST /policies/evaluate` | ✅ | Simulate a policy decision | Evaluates whether an operation would be allowed (without executing anything), useful for debugging/dry-runs. **Important:** this is evaluation only — there is no endpoint to *configure* policy limits at runtime (see "Known gaps" below). |
+
+## 6. Authorizations
+
+| Endpoint | Status | Role in the flow | What it actually does |
+|---|---|---|---|
+| `POST /authorizations/request` | ✅ | Request authorization | Creates a pending authorization record (no decision) for a `role`+`action` on a task. |
+| `POST /authorizations/{id}/decision` | ✅ | Decide an authorization | Records an explicit decision (`GRANTED`/`REJECTED`/`EXPIRED`/`REVOKED`). This is the only way for an authorization to stop being "pending." |
+| `GET /authorizations` | ✅ | List/filter authorizations | Supports filtering by `task_id`, `status`, and `pending_only` (added in this session — previously only filtered by `task_id`). |
+| `GET /authorizations/{id}` | ✅ | Authorization detail | State, most recent decision, requested context scope. |
+
+## 7. Executions
+
+| Endpoint | Status | Role in the flow | What it actually does |
+|---|---|---|---|
+| `POST /executions/request` | ✅ | Create an authorized execution | Links an execution to an already-granted authorization — doesn't run anything yet. |
+| `POST /executions/{id}/run` | ✅ | **Run synchronously** | Runs the execution to completion (calls the AI provider, resolves the result) and only responds when it finishes. |
+| `POST /executions/{id}/dispatch` | ✅ | **Run asynchronously** | Schedules the execution as a background asyncio task and responds immediately with `dispatched: true`; the client polls `GET /executions/{id}` afterward to see when it reaches `COMPLETED`. Validated with a polling test. |
+| `POST /executions/{id}/transition` | ✅ | Manual state transition | Manually moves the execution between states (`PREPARING`, `STARTED`, `RUNNING`, etc.) — operational/debug use. |
+| `POST /executions/{id}/complete` | ✅ | Manually record a result | Closes an execution with an explicit result/errors/resource usage, without going through the AI provider — used by external integrations or tests. |
+| `POST /executions/{id}/resolve-context` | ✅ | Resolve authorized context | Materializes the content of authorized files (e.g. reads `README.md` from disk) and persists a resolution record. |
+| `GET /executions/{id}/context` | ✅ | View already-resolved context | Lists an execution's context resolution records. |
+| `GET /executions` / `GET /executions/{id}` | ✅ | List/detail executions | With filtering by task, project, and state. |
+| — (cancellation) | 🚧 | — | **Doesn't actually exist.** There is a `cancel()` method declared on the interface (`ExecutionRepository` port) but no class implements it and no endpoint calls it. It's technically possible to force `POST /executions/{id}/transition` with `target_state: CANCELLED` (the state machine accepts that target), but that only changes the status in the database — it does **not** stop an execution already dispatched to run in the background. |
+
+## 8. Observability (Audit, Metrics, Events, Suggestions)
+
+| Endpoint | Status | Role in the flow | What it actually does |
+|---|---|---|---|
+| `GET /audit` | ✅ | Audit trail | Lists audit records (who did what, when, with what outcome), generated automatically on every relevant domain event. Now includes `correlation_id`/`causation_id`. |
+| `GET /audit/{id}` | ✅ | Record detail | Added in this session. |
+| `GET /events` | ✅ | Domain event history | Lists raw events (`TASK_CREATED`, `EXECUTION_COMPLETED`, etc.), filterable by type/task/execution/project. |
+| `GET /metrics` | ⚠️ | Raw metric records | Lists individual records generated automatically per execution (e.g. `execution.success`, tokens, cost). **No aggregation** — no endpoint computes sums/averages/success rates over time; anyone wanting a dashboard has to aggregate the raw records client-side. |
+| — (metrics aggregation) | 🚧 | — | **Doesn't exist.** `MetricsRepository` only has `add_many`/`list` — no aggregation method, neither in the domain nor the infrastructure. |
+| `GET /suggestions` | ✅ | List suggestions | Filterable by task. |
+| `GET /suggestions/{id}` | ✅ | Suggestion detail | Added in this session. |
+| `POST /tasks/{task_id}/suggestions` | ✅ | Generate a suggestion on demand | Added in this session — previously only generated automatically inside `advance`/`local-flow`. |
+| `POST /suggestions/{id}/accept` | ✅ | Accept a suggestion | Added in this session. Important: this only marks the record `ACCEPTED` — it does **not** by itself trigger authorization or execution (that still only happens inside `advance`, see the note in section 9). |
+| `POST /suggestions/{id}/reject` | ✅ | Reject a suggestion | Added in this session. |
+
+## 9. Chat-First Surface (`/requests/*`) — primary entry point
+
+| Endpoint | Status | Role in the flow | What it actually does |
+|---|---|---|---|
+| `POST /requests` | ✅ | **Create a natural-language request** | Accepts `project_root` + `prompt` (+ optionally `role`/`action`/`model`). Registers the project (idempotent, by `root_location`), creates the task, and advances **exactly one gated stage** — PLAN, the first one. Fixed in this session: previously, the PLAN stage happened synchronously and without any gate, and the first suggestion the client saw was already `IMPLEMENT` (task already in `PLANNED`) — a real deviation from what the documentation specifies, not a nuance. Today the first suggestion is always `PLAN`/`TASK_PLANNER`, evaluated by the same policy as any other stage: in `SUGGESTED` mode (default) without `approve_suggestion: true`, the call stops at `PLANNING` with the suggestion `PRESENTED` and `blocked_reason: "suggested_mode_requires_approval"` — no authorization is created. With `approve_suggestion: true`, the PLAN stage actually runs (authorization granted + execution) and the task stops at `PLANNED`, ready for the next `advance`. Confirmed empirically (not just by reading code) by running the actual call. |
+| `GET /requests/{id}/flow` | ✅ | **Observe the full state** | Unified view (task + authorizations + executions + suggestions + audit + metrics), with a derived `status` field (`PENDING_SUGGESTION`, `PENDING_AUTHORIZATION`, `RUNNING`, `COMPLETED`, etc.) — fixed in this session (see the note below). |
+| `POST /requests/{id}/approve` | ✅ | **Approve and continue, covering both possible cases** | Re-evaluated and fixed in v0.1.6. Covers two cases: (1) a pending/undecided authorization already exists (e.g. created externally via a direct `POST /authorizations/request` against the task) — it's granted directly, as before; (2) the common case in `SUGGESTED` mode, where `run_task_workflow_stage` returns before creating any authorization when policy blocks, leaving only the `PRESENTED` suggestion — now, if there's no pending authorization but there is a `PRESENTED` suggestion, `/approve` internally delegates to the same gated mechanism as `/advance` (`approve_stage: true`). This isn't a bypass: the delegated call still goes through the same policy evaluation, and if it's refused (e.g. mode/config changed), the response comes back with `blocked_reason` populated and `approved: false`, exactly as `/advance` would report. As a result, `/approve` optionally accepts the same context fields as `/advance` (`context_paths`, `documentation_path`, `test_args`, `model`, `provider_target`) — only required when the current stage needs them (e.g. PLAN requires `context_paths`); they're ignored when case (1) applies. |
+| `POST /requests/{id}/advance` | ✅ | **Advance to the next stage** | The chat-first equivalent of `POST /tasks/{task_id}/advance` — this is the endpoint, called with `approve_stage: true`, that actually makes the task progress (PLAN → IMPLEMENT → REVIEW → ...), granting authorization and executing via the configured provider. |
+
+## 10. Legacy Flows (kept for compatibility)
+
+| Endpoint | Status | Role in the flow | What it actually does |
+|---|---|---|---|
+| `POST /flows/local` | ✅ | Local demo flow | Precursor to `/requests` — uses exactly the same internal mechanism (`run_local_flow`), so it inherits the same fix: creates a project+task and advances only the first gated stage (PLAN), not jumping straight to a full execution. Kept for compatibility. |
+| `POST /projects/operations` | ✅ | Protected project operation | Runs a specific operation on the Project Adapter (read, write, run a command/test) through policy+authorization, outside the PLAN→...→DOCUMENT cycle. The task created here still has to pass through `PLANNED` before the operation starts (a mechanical requirement of the state machine) — this hop was also fixed in this session to go through the same suggestion/policy gate (`TASK_PLANNER` role/`PLAN` action), instead of happening with no record at all. A single `approve_operation: true` covers both this bootstrap step and the operation itself. |
 
 ---
 
-## Lacunas conhecidas (confirmadas por leitura de código, não suposição)
+## 11. Authentication (ADR-012, Phase 3)
 
-1. **Cancelamento de execução** — não existe de fato. O port declara `cancel()`, nada implementa. `target_state: CANCELLED` via transição manual só troca o status no banco, não para nada em background.
-2. **Agregação de métricas** — só existe listagem de registros brutos por execução; nenhuma soma/média/taxa ao longo do tempo ou por projeto.
-3. **Configuração runtime de `AutomaticExecutionPolicy`** — zero exposição na CLI ou na API. Os limites do modo `AUTOMATIC` (quais `role`+`action` são permitidos automaticamente, se pode trocar de modelo, se pode expandir contexto) são hoje só o valor padrão hardcoded no código (`allowed_operations=((DEVELOPER, IMPLEMENT),)`); não há como um usuário configurar isso sem editar o código-fonte. **Isso ficou mais visível com a correção do gate de PLAN na v0.1.5:** como PLAN agora também exige estar na allowlist do `AutomaticExecutionPolicy` para pular aprovação, e `(TASK_PLANNER, PLAN)` não está na allowlist padrão, hoje **nenhum** pedido em modo `AUTOMATIC` via CLI/API consegue passar do primeiro estágio sem essa configuração — o modo `AUTOMATIC` só funciona de fato através da API Python interna (`RunLocalFlowCommand`/`RunProjectOperationCommand` com `automatic_policy` customizado), não pela CLI/API pública. Isso não é uma regressão da correção — é a política corretamente aplicada revelando uma lacuna que já existia (a config nunca esteve exposta); mas antes da correção passava despercebida porque o próprio PLAN não era avaliado.
-4. **`ORCHAI_AUTH_ENFORCED` ainda é `false` por padrão** (seção 11) — a checagem de permissão existe em toda rota/comando, mas está inerte até essa flag ser ligada deliberadamente (rollout intencional, `docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §6, não um bug). Sem ela ligada, a API/CLI continuam abertas exatamente como antes da Fase 3.
+| Endpoint | Status | Role in the flow | What it actually does |
+|---|---|---|---|
+| `POST /auth/login` | ✅ | **Authenticate** | Exchanges `username`/`password` for an access/refresh token pair. `401` for invalid credentials or an inactive user. Doesn't require prior authentication — it's the entry point. CLI equivalent: `orchai auth login`, which persists the token pair to `~/.orchai/credentials.json` (permission `0600`). |
+| `POST /auth/refresh` | ✅ | **Renew a session** | Exchanges a valid refresh token for a new access/refresh pair (single-use rotation — the used token is invalidated in the same step). `401` for a missing, expired, invalid, or already-used token. |
+| `POST /auth/logout` | ✅ | **End a session** | Revokes a refresh token (idempotent — calling it again isn't an error). Requires authentication (any valid user), no specific permission. CLI equivalent: `orchai auth logout`, which also clears `~/.orchai/credentials.json`. |
+| `orchai auth bootstrap-admin` | ✅ | **Create the first superuser** | No equivalent HTTP route (ADR-012 §8) — solves the chicken-and-egg problem: only works while the database has zero users, without requiring an already-authenticated caller. Username/password come from `--username`/`--password` or from `ORCHAI_ADMIN_USERNAME`/`ORCHAI_ADMIN_PASSWORD`. |
 
-**Resolvidas** (mantidas aqui por rastreabilidade):
+All other pre-existing routes and commands now declare a required permission (`require_permission(key)` / `require_cli_permission(key)`), but that check is only actually enforced when `ORCHAI_AUTH_ENFORCED=true` — the default is `false` (inert), preserving the behavior of every route/command documented in sections 1 through 10 above for anyone who hasn't turned the flag on. The full permission mapping per route/command is in `docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §4, not duplicated here. A superuser token (`is_superuser`) always satisfies any permission.
 
-- ~~`/requests/{id}/approve` não resolve o caso comum de `PENDING_SUGGESTION`~~ (v0.1.6) — corrigido: ver seção 9. `/approve` agora delega para o mesmo mecanismo gated de `/advance` quando só existe uma sugestão `PRESENTED`.
-- ~~`POST /admin/db/create` gerava um erro forte na CLI (`typer.BadParameter`) para banco não-PostgreSQL, mas retornava uma resposta informativa 200 na API para o mesmo caso~~ (v0.1.7) — em vez de alinhar os dois, `db create` e `db migrate` foram **removidos**; `db sync`/`POST /admin/db/sync` é agora a única operação de administração de banco, cobrindo os dois casos num só passo — ver seção 2.
-- ~~Gestão de usuários não tinha superfície própria~~ (v0.1.11) — resolvido pela Fase 4: ver seção 12. `orchai users *` / `orchai access-roles *` / `GET,POST /admin/users` / `GET,POST /admin/access-roles` agora existem e consomem `admin:manage_users`.
+User management gained its own surface in Phase 4 (section 12) — `admin:manage_users` is no longer a permission without a consumer.
 
 ---
 
-## Exemplo de uso completo via API
+## 12. User Configuration — Admin and Self-Service (ADR-012, Phase 4)
 
-Cenário: conectar um projeto, criar um pedido, avançar até a etapa de **review de código**. Toda a sequência abaixo foi **rodada de verdade** contra a API (via `TestClient`, não apenas inferida do código) para garantir que o exemplo reflete o comportamento real — já com a correção do gate de PLAN aplicada nesta sessão (ver a nota de atualização no topo deste documento).
+| Endpoint | Status | Role in the flow | What it actually does |
+|---|---|---|---|
+| `GET /admin/users` | ✅ | **List all users** | Returns every field of each user (username, email, is_superuser, is_active, timestamps, `access_roles` resolved by name, `connected_project_ids`) — except `password_hash`, never exposed. Requires `admin:manage_users`. |
+| `POST /admin/users` | ✅ | **Create a new user** | Creates the user and immediately assigns their initial `AccessRole`s (`role_ids`). A non-superuser with no `role_id` at all is rejected with `400` (`UserRequiresAccessRoleError`) — replaces the discarded "system Default AccessRole" design with a simpler rule giving the same practical guarantee. Duplicate username → `409`. Requires `admin:manage_users`. |
+| `PUT /admin/users/{id}/access-roles` | ✅ | **Replace a user's `AccessRole`s** | A *replace-all* operation, not incremental: the submitted list becomes the complete set. Emptying it to zero is rejected (`400`) unless the user is a superuser. Requires `admin:manage_users`. |
+| `GET /admin/access-roles` | ✅ | **List all `AccessRole`s** | Each item comes with `permissions` and `users` fully resolved (not just ids). Requires `admin:manage_users`. |
+| `POST /admin/access-roles` | ✅ | **Create an `AccessRole`** | Duplicate name → `409`. Reuses `IdentityService.create_access_role`, already tested since Phase 1. Requires `admin:manage_users`. |
+| `PUT /admin/access-roles/{id}/permissions` | ✅ | **Replace an `AccessRole`'s permission bundle** | Also *replace-all*. `Permission` remains a fixed system catalog — there's no endpoint to create new permissions, only to (re)assign them to an `AccessRole`. Requires `admin:manage_users`. |
+| `GET /admin/projects` | ✅ | **Administrative project directory** | Lists every project in the system with `capabilities`, readiness levels, and `connected_user_ids` — unlike `GET /projects` (`projects:read`), which lists projects without those administrative details. Requires the new `admin:manage_projects` permission. |
+| `GET /me` | ✅ | **View your own profile** | Returns the same fields as `GET /admin/users` for the authenticated user, including `access_roles` and `connected_project_ids`. |
+| `PATCH /me` | ✅ | **Update your own profile** | Only accepts `username`/`email` — there's no field for a user to change their own `AccessRole` or `is_superuser`. Duplicate username → `409`. |
+| `GET /me/projects` | ✅ | **Projects connected by the logged-in user** | Reads from `project_connections` (see the note below). |
+
+**Important about `/me`:** these three routes don't use `require_permission()` (which becomes a no-op when `ORCHAI_AUTH_ENFORCED=false`, leaving "who is the current user" undefined). They use their own dependency, `require_authenticated_user()` (`require_authenticated_cli_user()` on the CLI), which **always** requires a valid bearer token, regardless of the flag — there's no sensible "no-op" reading of "show my own profile."
+
+**`project_connections` is not access control.** It's a purely informational reference — "this user connected this project to OrchAI" — that doesn't restrict reading, registering, or operating on any project, and a project can be connected by multiple users. `POST /projects` now automatically links the authenticated caller (when a valid token is present) to this record. It lives in the same database as `projects` (not the identity database, which stays fixed for security), since it's descriptive project metadata, not identity data.
+
+---
+
+## Known gaps (confirmed by reading code, not assumption)
+
+1. **Execution cancellation** — doesn't actually exist. The port declares `cancel()`, nothing implements it. `target_state: CANCELLED` via manual transition only changes the status in the database, it doesn't stop anything running in the background.
+2. **Metrics aggregation** — only per-execution raw record listing exists; no sum/average/rate over time or by project.
+3. **Runtime configuration of `AutomaticExecutionPolicy`** — zero exposure in the CLI or API. The limits of `AUTOMATIC` mode (which `role`+`action` are allowed automatically, whether the model can be changed, whether context can be expanded) are today only the hardcoded default value in the code (`allowed_operations=((DEVELOPER, IMPLEMENT),)`); there's no way for a user to configure this without editing the source code. **This became more visible with the v0.1.5 PLAN gate fix:** since PLAN now also needs to be in `AutomaticExecutionPolicy`'s allowlist to skip approval, and `(TASK_PLANNER, PLAN)` isn't in the default allowlist, today **no** request in `AUTOMATIC` mode via CLI/API can get past the first stage without this configuration — `AUTOMATIC` mode only actually works through the internal Python API (`RunLocalFlowCommand`/`RunProjectOperationCommand` with a custom `automatic_policy`), not through the public CLI/API. This isn't a regression from the fix — it's the policy being correctly applied, revealing a gap that already existed (the config was never exposed); but before the fix it went unnoticed because PLAN itself wasn't evaluated.
+4. **`ORCHAI_AUTH_ENFORCED` is still `false` by default** (section 11) — the permission check exists on every route/command, but is inert until this flag is deliberately turned on (an intentional rollout, `docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §6, not a bug). Without it on, the API/CLI remain open exactly as before Phase 3.
+
+**Resolved** (kept here for traceability):
+
+- ~~`/requests/{id}/approve` doesn't resolve the common `PENDING_SUGGESTION` case~~ (v0.1.6) — fixed: see section 9. `/approve` now delegates to the same gated mechanism as `/advance` when only a `PRESENTED` suggestion exists.
+- ~~`POST /admin/db/create` raised a hard error in the CLI (`typer.BadParameter`) for a non-PostgreSQL database, but returned an informative 200 response in the API for the same case~~ (v0.1.7) — rather than aligning the two, `db create` and `db migrate` were **removed**; `db sync`/`POST /admin/db/sync` is now the only database administration operation, covering both cases in a single step — see section 2.
+- ~~User management had no surface of its own~~ (v0.1.11) — resolved by Phase 4: see section 12. `orchai users *` / `orchai access-roles *` / `GET,POST /admin/users` / `GET,POST /admin/access-roles` now exist and consume `admin:manage_users`.
+
+---
+
+## Full API Usage Example
+
+Scenario: connect a project, create a request, advance through to the **code review** stage. The entire sequence below was **actually run** against the API (via `TestClient`, not just inferred from code) to make sure the example reflects real behavior — already with the PLAN gate fix applied in this session (see the update note at the top of this document).
 
 ```bash
 BASE=http://localhost:8000
-DB="sqlite:///./demo.db"   # ou omita para usar o PostgreSQL padrão
+DB="sqlite:///./demo.db"   # or omit it to use the PostgreSQL default
 
-# 1. Conectar (registrar) o projeto — opcional como passo isolado, já que o
-#    /requests do passo 2 registra o projeto sozinho (upsert por caminho),
-#    mas fazer aqui deixa o project_id disponível para filtros depois.
+# 1. Connect (register) the project — optional as a standalone step, since
+#    step 2's /requests already registers the project on its own (upsert by
+#    path), but doing it here makes project_id available for filters later.
 curl -s -X POST "$BASE/projects" -H 'Content-Type: application/json' -d '{
-  "project_root": "/caminho/do/seu/projeto",
+  "project_root": "/path/to/your/project",
   "database_url": "'"$DB"'"
 }'
 # → { "project_id": "…", "readiness_level": "LEVEL_2_VALIDATABLE", ... }
 
-# 2. Criar o pedido em linguagem natural (chat-first)
+# 2. Create the natural-language request (chat-first)
 curl -s -X POST "$BASE/requests" -H 'Content-Type: application/json' -d '{
-  "project_root": "/caminho/do/seu/projeto",
-  "prompt": "Implementar validação de e-mail no cadastro de usuários",
-  "context_paths": ["src/cadastro.py"],
+  "project_root": "/path/to/your/project",
+  "prompt": "Implement email validation on user sign-up",
+  "context_paths": ["src/signup.py"],
   "database_url": "'"$DB"'"
 }'
 # → { "request_id": "…", "status": "PENDING_SUGGESTION",
 #     "suggestion": { "suggested_role": "TASK_PLANNER", "suggested_action": "PLAN", ... } }
-REQUEST_ID="…"   # copie o request_id retornado
+REQUEST_ID="…"   # copy the returned request_id
 ```
 
-A primeira sugestão agora é sempre `PLAN`/`TASK_PLANNER`, exatamente como `docs/architecture/CHAT-FIRST-REQUEST-MODEL.md` (seção 3) descreve — "o próximo passo depois de conectar" é mesmo planejar, não implementar. A tarefa fica em `PLANNING`, aguardando aprovação como qualquer outro estágio.
+The first suggestion is now always `PLAN`/`TASK_PLANNER`, exactly as `docs/architecture/CHAT-FIRST-REQUEST-MODEL.md` (section 3) describes — "the next step after connecting" really is to plan, not implement. The task stays at `PLANNING`, awaiting approval like any other stage.
 
 ```bash
-# 3. Avançar para PLAN, aprovando explicitamente — este estágio agora roda
-#    de verdade (autorização + execução), como qualquer outro
+# 3. Advance to PLAN, explicitly approving — this stage now actually runs
+#    (authorization + execution), like any other stage
 curl -s -X POST "$BASE/requests/$REQUEST_ID/advance" -H 'Content-Type: application/json' -d '{
-  "context_paths": ["src/cadastro.py"],
+  "context_paths": ["src/signup.py"],
   "approve_stage": true,
   "database_url": "'"$DB"'"
 }'
 # → { "stage": "PLAN", "task_state": "PLANNED", "execution_state": "COMPLETED",
 #     "output": "Stub provider processed 1 authorized context item(s)." }
 
-# 4. Avançar para IMPLEMENT
+# 4. Advance to IMPLEMENT
 curl -s -X POST "$BASE/requests/$REQUEST_ID/advance" -H 'Content-Type: application/json' -d '{
-  "context_paths": ["src/cadastro.py"],
+  "context_paths": ["src/signup.py"],
   "approve_stage": true,
   "database_url": "'"$DB"'"
 }'
 # → { "stage": "IMPLEMENT", "task_state": "IMPLEMENTED", "execution_state": "COMPLETED",
 #     "output": "Stub provider processed 1 authorized context item(s)." }
 
-# 5. Avançar para REVIEW — a etapa de revisão de código que você pediu
+# 5. Advance to REVIEW — the code review stage you asked for
 curl -s -X POST "$BASE/requests/$REQUEST_ID/advance" -H 'Content-Type: application/json' -d '{
-  "context_paths": ["src/cadastro.py"],
+  "context_paths": ["src/signup.py"],
   "approve_stage": true,
   "database_url": "'"$DB"'"
 }'
 # → { "stage": "REVIEW", "task_state": "REVIEWING", "execution_state": "COMPLETED",
 #     "output": "Stub provider processed 1 authorized context item(s)." }
 
-# 6. A qualquer momento, ver o estado completo do pedido
+# 6. At any point, see the full state of the request
 curl -s "$BASE/requests/$REQUEST_ID/flow?database_url=$DB"
-# → task (state=REVIEWING), autorizações, execuções, sugestões, auditoria e
-#   métricas, tudo junto. Uma nova sugestão (para VALIDATE) já aparece aqui,
-#   marcada PRESENTED, porque a próxima etapa também requer aprovação.
+# → task (state=REVIEWING), authorizations, executions, suggestions, audit, and
+#   metrics, all together. A new suggestion (for VALIDATE) already appears here,
+#   marked PRESENTED, because the next stage also requires approval.
 ```
 
-Observações sobre o exemplo:
+Notes about the example:
 
-- Cada chamada a `/advance` resolve sozinha qual é o próximo estágio (via a `SuggestionEngine`) — não é preciso informar `stage` explicitamente, a menos que você queira forçar uma etapa específica fora de ordem.
-- `approve_stage: true` é o que efetivamente autoriza e executa a etapa, **para qualquer estágio, inclusive PLAN**. Sem ele, a chamada para no estado `blocked_reason: "suggested_mode_requires_approval"`, sem criar autorização nenhuma (a tarefa fica em `PLANNING`, nem chega a `PLANNED`). A partir da v0.1.6, `POST /requests/{id}/approve` também resolve esse caso — chamá-lo (passando `context_paths` quando o estágio bloqueado exigir contexto, como PLAN) tem o mesmo efeito que repetir o `/advance` com `approve_stage: true`.
-- Se você tentar avançar mais uma vez depois do passo 5 (rumo a `VALIDATE`), a chamada tende a bloquear com `blocked_reason: "validation_requires_level_2"` a menos que o projeto conectado já tenha estrutura de testes reconhecida no disco (nível de prontidão `LEVEL_2_VALIDATABLE`) — é a política de prontidão do projeto, não um bug, mas vale saber antes de montar um fluxo automatizado ponta a ponta.
-- O `"output": "Stub provider processed …"` reflete que hoje a execução roda contra o provider `stub` (determinístico, sem custo, sem IA real) — é exatamente esse ponto que os adapters reais de Ollama/OpenAI/Anthropic vão substituir.
+- Each call to `/advance` resolves the next stage on its own (via the `SuggestionEngine`) — there's no need to pass `stage` explicitly, unless you want to force a specific out-of-order step.
+- `approve_stage: true` is what actually authorizes and executes the stage, **for any stage, including PLAN**. Without it, the call stops in state `blocked_reason: "suggested_mode_requires_approval"`, without creating any authorization (the task stays at `PLANNING`, never even reaching `PLANNED`). As of v0.1.6, `POST /requests/{id}/approve` also resolves this case — calling it (passing `context_paths` when the blocked stage requires context, like PLAN) has the same effect as repeating `/advance` with `approve_stage: true`.
+- If you try to advance once more after step 5 (toward `VALIDATE`), the call tends to block with `blocked_reason: "validation_requires_level_2"` unless the connected project already has recognized test structure on disk (readiness level `LEVEL_2_VALIDATABLE`) — that's the project's readiness policy, not a bug, but worth knowing before building a fully automated end-to-end flow.
+- The `"output": "Stub provider processed …"` reflects that execution currently runs against the `stub` provider (deterministic, no cost, no real AI) — this is exactly the point the real Ollama/OpenAI/Anthropic adapters were meant to replace.
