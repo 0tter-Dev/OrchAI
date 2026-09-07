@@ -36,6 +36,9 @@ jobs:
       - name: Lint
         run: uv run ruff check
 
+      - name: Prepare pytest temp directory
+        run: mkdir -p .pytest-tmp
+
       - name: Test
         run: uv run pytest --basetemp=.pytest-tmp/ci-${{ github.run_id }}-${{ github.run_attempt }}
 
