@@ -60,7 +60,14 @@ fold into `ARCHITECTURAL-CONTRACT.md` §6 (4 cross-cutting decisions)
 or the matching `docs/context/*.md` file's Key Rules (13 single-domain
 decisions, including a new Conversations section in
 `chat-first-and-interfaces.md` and a streaming section in
-`execution-engine.md` for content that had no prior home).
+`execution-engine.md` for content that had no prior home). `v0.2.6`
+introduces `docs/DEVELOPMENT-GUIDE.md`, a lean, OrchFlow-style
+engineering-discipline document (architectural rules, code quality,
+scope control, documentation/naming rules, testing and CI/CD
+direction, and the selected technology baseline), and trims
+`ARCHITECTURE.md`/`IMPLEMENTATION-MAP.md` of the implementation-baseline
+sections it now owns, pointing to it and to the relevant
+`docs/context/*.md` files instead of restating them.
 
 The current AI-agent Git identity for automated pull requests is
 `0tter-Dev-AI`.
@@ -74,28 +81,7 @@ broad, split it into sequential steps before implementation starts.
 
 ## Next Implementation Roadmap
 
-1. `docs(architecture): add DEVELOPMENT-GUIDE.md and trim ARCHITECTURE.md/IMPLEMENTATION-MAP.md`
-
-   Objective: introduce a lean, OrchFlow-style engineering-discipline
-   document without losing the deeper reference material OrchAI's larger
-   system needs.
-
-   Main scope: create `docs/DEVELOPMENT-GUIDE.md` from the
-   implementation-baseline and boundary sections of `ARCHITECTURE.md`
-   and `IMPLEMENTATION-MAP.md`; trim those two documents to remove the
-   sections now owned by the new guide, keeping them as the canonical
-   conceptual-architecture and roadmap-to-code documents respectively.
-
-   Likely documents to update: `docs/DEVELOPMENT-GUIDE.md` (new),
-   `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION-MAP.md`, `docs/INDEX.md`.
-
-   Expected validation: documentation diff review; confirm no sentence
-   is lost, only relocated or deduplicated.
-
-   Planned semantic decision: patch bump from `0.2.5` to `0.2.6`, because
-   this changes documented engineering governance.
-
-2. `docs(architecture): fold VISION.md into ARCHITECTURAL-CONTRACT.md and retire the old delivery baseline`
+1. `docs(architecture): fold VISION.md into ARCHITECTURAL-CONTRACT.md and retire the old delivery baseline`
 
    Objective: remove the two remaining root documents superseded by
    earlier steps.
@@ -118,7 +104,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.6` to `0.2.7`, because
    this retires governance documents still linked from elsewhere.
 
-3. `docs(user-guide): merge the onboarding and operations guides`
+2. `docs(user-guide): merge the onboarding and operations guides`
 
    Objective: replace two overlapping user documents with a walkthrough
    plus a reference, matching the OrchFlow split.
@@ -142,7 +128,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.7` to `0.2.8`, because
    this changes documented user-facing setup guidance.
 
-4. `docs(index): rewrite INDEX.md as the single navigation hub`
+3. `docs(index): rewrite INDEX.md as the single navigation hub`
 
     Objective: give the now-final documentation set one authoritative
     entry point.
@@ -160,7 +146,7 @@ broad, split it into sequential steps before implementation starts.
     Planned semantic decision: no version bump; pure navigation, no
     documented behavior or governance change.
 
-5. `docs(agents): restructure AGENTS.md`
+4. `docs(agents): restructure AGENTS.md`
 
     Objective: align OrchAI's agent rulebook with the finished
     documentation model.

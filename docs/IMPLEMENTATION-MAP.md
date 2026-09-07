@@ -717,129 +717,31 @@ The implementation foundation is structurally ready when:
 -   cross-role boundaries are enforceable;
 -   historical operations remain traceable.
 
-## 22. Technology and Runtime Baseline
+## 22. Implementation Baseline Pointer
 
-The technology baseline has now been decided and must remain consistent
-with this implementation map.
+The technology stack, physical code structure, project-content
+boundary, AI provider boundary, and the LEVEL_0-3 project
+readiness/security gates that once elaborated this map's foundation
+are engineering-discipline and domain-specific concerns respectively
+— they are documented once, not here, to avoid drift:
 
-``` text
-Python 3.14
-uv + pyproject.toml
-FastAPI
-Typer
-Pydantic
-SQLAlchemy 2.x
-PostgreSQL
-SQLite
-HTTPX
-asyncio
-pytest
-Docker
-```
+-   selected technology baseline —
+    [`DEVELOPMENT-GUIDE.md`](DEVELOPMENT-GUIDE.md) and
+    `docs/context/technology-and-test-strategy.md`
+-   physical code structure and dependency direction —
+    `docs/context/modules-and-domain-structure.md`
+-   project content boundary and persistence —
+    `docs/context/project-adapter-and-security.md` and
+    `docs/context/persistence.md`
+-   AI provider boundary — `docs/context/execution-engine.md`
+-   readiness levels (LEVEL_0-3) and security profiles
+    (DISCOVERABLE/READABLE/PERSISTABLE/PROVIDER-SHAREABLE) —
+    `docs/context/project-adapter-and-security.md`
 
-PostgreSQL is the primary persistence target and the explicit default
-when no database URL is configured. SQLite remains supported, strictly as
-a secondary option for lightweight local development and automated
-tests, opted into explicitly.
-
-The first runtime uses `asyncio` tasks for long-running execution and
-does not require RabbitMQ, Redis, Celery, Kafka, or another distributed
-broker. The messaging and execution boundaries remain replaceable so
-persistent workers or a broker can be introduced later.
-
-## 23. Physical Code Structure
-
-The implementation follows a modular monolith with Clean/Hexagonal
-principles:
-
-``` text
-src/orchai/
-├── domain/
-├── application/
-├── infrastructure/
-├── interfaces/
-└── bootstrap/
-```
-
-The domain owns business rules, application owns use-case orchestration,
-infrastructure implements external contracts, interfaces translate
-external requests, and bootstrap assembles the runtime.
-
-The detailed module mapping is defined in
-`docs/context/modules-and-domain-structure.md`.
-
-## 24. Project Content Boundary
-
-Connected project source, documentation, and other project-owned content
-remain external to OrchAI.
-
-The Project Adapter is the access boundary. OrchAI persists project
-identity, adapter configuration, references, capabilities,
-context-resolution metadata, and orchestration history rather than
-mirroring complete project contents.
-
-## 25. AI Provider Boundary
-
-The Model Manager resolves provider-independent model definitions and
-capabilities. Concrete local, cloud, and external-agent integrations
-remain infrastructure adapters.
-
-## 26. Final Implementation Readiness
-
-The documentation foundation is considered ready for initial
-implementation when the accepted ADRs, architecture documents, domain
-contracts, navigation documents, and this map agree on:
-
--   modular monolith structure;
--   dependency direction;
--   Task/Execution ownership;
--   State Machine authority;
--   async-first runtime;
--   provider adapter boundaries;
--   Project Adapter ownership;
--   persistence baseline;
--   API/CLI boundaries;
--   testing boundaries;
--   authorization invariants.
-
-Concrete implementation work may begin after repository-level bootstrap
-files and the first domain slice are defined.
-
-## 27. Project Security and Readiness Layer
-
-The implementation should include an explicit layer that evaluates:
-
--   whether a project is merely connectable;
--   whether the project is ready for tracked modification;
--   whether the project is ready for meaningful validation flows;
--   whether the project is ready for CI/CD or broader automation;
--   what project knowledge may be persisted;
--   what project knowledge may cross provider boundaries.
-
-This layer should support readiness rules equivalent to:
-
-``` text
-Connect project
-    -> LEVEL_0
-
-Change code
-    -> LEVEL_1
-
-Run or structure test/validation flow
-    -> LEVEL_2
-
-Create or change CI/CD
-    -> LEVEL_3
-```
-
-It should also support project security profiles that distinguish:
-
-``` text
-DISCOVERABLE
-READABLE
-PERSISTABLE
-PROVIDER-SHAREABLE
-```
-
-This keeps OrchAI broadly connectable while making high-impact
-operations explicit, auditable, and safely constrained.
+This map's own responsibility remains everything above: the
+component-to-module mapping, configuration layers, boundaries,
+execution-mode flows, typical task flow, conceptual implementation
+order, capability model, error/recovery boundaries, concurrency
+readiness, testing boundaries, security/trust boundaries, and
+observability model that bridge the architectural contract to actual
+code responsibilities.
