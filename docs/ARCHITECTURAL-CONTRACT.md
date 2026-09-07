@@ -378,7 +378,7 @@ command-line interfaces, web interfaces, or other clients.
 VS Code may be a primary client but must not be a fundamental
 architectural dependency.
 
-OrchAI Desktop (see `docs/architecture/DESKTOP-APPLICATION.md`,
+OrchAI Desktop (see `docs/context/deployment-and-desktop.md`,
 ADR-017) is the first fully realized desktop client and the primary
 day-to-day surface for end users. It remains bound by this principle
 like any other client: it is a caller of the same application services

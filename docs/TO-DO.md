@@ -47,7 +47,14 @@ continues with the identity/authorization/security cluster
 `project-adapter-and-security.md`, `context-management.md`,
 `chat-first-and-interfaces.md`), also removing `ADAPTER-CONTRACTS.md`
 once both of its sections (AI Provider Adapter, Project Adapter) had
-homes across this cluster and the previous one.
+homes across this cluster and the previous one. `v0.2.4` finishes the
+`docs/context/` consolidation with the infrastructure cluster
+(`observability.md`, `configuration.md`, `persistence.md`,
+`modules-and-domain-structure.md`, `technology-and-test-strategy.md`,
+`deployment-and-desktop.md`), removing every remaining file in
+`docs/architecture/` and `docs/domains/` (including `COMPONENTS.md`
+and both directories' own `INDEX.md`) so neither directory exists
+anymore.
 
 The current AI-agent Git identity for automated pull requests is
 `0tter-Dev-AI`.
@@ -61,34 +68,7 @@ broad, split it into sequential steps before implementation starts.
 
 ## Next Implementation Roadmap
 
-1. `docs(context): consolidate infrastructure documentation`
-
-   Objective: finish the `docs/context/` consolidation with the
-   remaining infrastructure-facing files.
-
-   Main scope: create `docs/context/observability.md`, `configuration.md`,
-   `persistence.md`, `modules-and-domain-structure.md`,
-   `technology-and-test-strategy.md`, and `deployment-and-desktop.md`
-   from `domains/AUDIT.md`/`METRICS.md`/`SUGGESTIONS.md`,
-   `domains/CONFIGURATION.md`, `CONFIGURATION-ARCHITECTURE.md`,
-   `PERSISTENCE-STRATEGY.md`, `MODULES.md`/`DOMAIN-MODULE-STRUCTURE.md`/
-   `APPLICATION-STRUCTURE.md`, `TECHNOLOGY-STACK.md`/`TEST-STRATEGY.md`,
-   and `DEPLOYMENT-MODEL.md`/`DESKTOP-APPLICATION.md`; remove the
-   now-empty `docs/architecture/` and `docs/domains/` directories along
-   with their own `INDEX.md`/`STATUS.md` files.
-
-   Likely documents to update: the six new `docs/context/*.md` files,
-   `docs/architecture/` and `docs/domains/` (removed entirely),
-   `docs/INDEX.md`.
-
-   Expected validation: documentation diff review; grep for dangling
-   references; confirm `docs/architecture/` and `docs/domains/` no
-   longer exist.
-
-   Planned semantic decision: patch bump from `0.2.3` to `0.2.4`, because
-   this completes a documented architecture restructuring.
-
-2. `docs(decisions): retire the ADR format into docs/archive/decisions`
+1. `docs(decisions): retire the ADR format into docs/archive/decisions`
 
    Objective: stop using standalone ADRs as the active decision-record
    mechanism, matching the OrchFlow-inspired model.
@@ -113,7 +93,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.4` to `0.2.5`, because
    this changes the documented decision-record process.
 
-3. `docs(architecture): add DEVELOPMENT-GUIDE.md and trim ARCHITECTURE.md/IMPLEMENTATION-MAP.md`
+2. `docs(architecture): add DEVELOPMENT-GUIDE.md and trim ARCHITECTURE.md/IMPLEMENTATION-MAP.md`
 
    Objective: introduce a lean, OrchFlow-style engineering-discipline
    document without losing the deeper reference material OrchAI's larger
@@ -134,7 +114,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.5` to `0.2.6`, because
    this changes documented engineering governance.
 
-4. `docs(architecture): fold VISION.md into ARCHITECTURAL-CONTRACT.md and retire the old delivery baseline`
+3. `docs(architecture): fold VISION.md into ARCHITECTURAL-CONTRACT.md and retire the old delivery baseline`
 
    Objective: remove the two remaining root documents superseded by
    earlier steps.
@@ -157,7 +137,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.6` to `0.2.7`, because
    this retires governance documents still linked from elsewhere.
 
-5. `docs(user-guide): merge the onboarding and operations guides`
+4. `docs(user-guide): merge the onboarding and operations guides`
 
    Objective: replace two overlapping user documents with a walkthrough
    plus a reference, matching the OrchFlow split.
@@ -181,7 +161,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.7` to `0.2.8`, because
    this changes documented user-facing setup guidance.
 
-6. `docs(index): rewrite INDEX.md as the single navigation hub`
+5. `docs(index): rewrite INDEX.md as the single navigation hub`
 
     Objective: give the now-final documentation set one authoritative
     entry point.
@@ -199,7 +179,7 @@ broad, split it into sequential steps before implementation starts.
     Planned semantic decision: no version bump; pure navigation, no
     documented behavior or governance change.
 
-7. `docs(agents): restructure AGENTS.md`
+6. `docs(agents): restructure AGENTS.md`
 
     Objective: align OrchAI's agent rulebook with the finished
     documentation model.
@@ -234,7 +214,7 @@ broad, split it into sequential steps before implementation starts.
   implementation starts
 - evaluate version impact before starting a step and confirm it once the
   diff is complete
-- never drop an ADR's decision content during retirement (item 2): every
+- never drop an ADR's decision content during retirement (item 1): every
   decision lands in exactly one place, cross-checked against the mapping
   table in the OrchFlow-inspired refactor plan before its source ADR is
   archived

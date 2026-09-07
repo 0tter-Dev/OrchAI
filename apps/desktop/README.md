@@ -1,7 +1,7 @@
 # OrchAI Desktop
 
 The Windows desktop shell for OrchAI (ADR-017,
-`docs/architecture/DESKTOP-APPLICATION.md`). Runs the existing
+`docs/context/deployment-and-desktop.md`). Runs the existing
 `src/orchai` backend in-process and renders it in a native window via
 `pywebview`, backed by Windows' built-in WebView2 runtime.
 
@@ -90,7 +90,7 @@ it manually before distributing a build:
 
 This packaging step is a separate, independent deployment shape from
 the headless Docker image (`Dockerfile`, repository root) — see
-`docs/architecture/DEPLOYMENT-MODEL.md`.
+`docs/context/deployment-and-desktop.md`.
 
 ## Identity
 

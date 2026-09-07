@@ -19,26 +19,14 @@ provide a stable entry point for humans and AI agents.
     Architectural invariants and non-negotiable principles.
 -   [`ARCHITECTURE.md`](ARCHITECTURE.md) --- High-level system
     architecture and relationships.
--   [`architecture/COMPONENTS.md`](architecture/COMPONENTS.md) --- Major
-    component responsibilities and boundaries.
 -   [`IMPLEMENTATION-MAP.md`](IMPLEMENTATION-MAP.md) --- Roadmap from
     architecture to implementation.
 
-### Architecture Implementation
+### Context Documentation
 
--   [`architecture/INDEX.md`](architecture/INDEX.md) --- Architecture
-    documentation navigation.
-
-### Domains
-
--   [`domains/INDEX.md`](domains/INDEX.md) --- Domain documentation
-    navigation.
-
-### Context Documentation (in progress)
-
-`docs/context/` is the target consolidation of `docs/architecture/`
-and `docs/domains/` into one file per bounded concept (see
-`docs/TO-DO.md`'s "Next Implementation Roadmap"). So far:
+`docs/context/` is the consolidation of the former `docs/architecture/`
+and `docs/domains/` directories into one file per bounded concept (see
+`docs/TO-DO.md`'s "Next Implementation Roadmap"):
 
 -   [`context/tasks-and-lifecycle.md`](context/tasks-and-lifecycle.md)
     --- Task identity, scope, lifecycle, and the state machine.
@@ -63,6 +51,19 @@ and `docs/domains/` into one file per bounded concept (see
 -   [`context/chat-first-and-interfaces.md`](context/chat-first-and-interfaces.md)
     --- The `/requests` chat-first projection and the CLI/API/UI
     boundary.
+-   [`context/observability.md`](context/observability.md) --- Audit,
+    Metrics, and Suggestions.
+-   [`context/configuration.md`](context/configuration.md) --- The
+    layered configuration contract and current environment variables.
+-   [`context/persistence.md`](context/persistence.md) --- What OrchAI
+    persists, the repository boundary, and the relational model.
+-   [`context/modules-and-domain-structure.md`](context/modules-and-domain-structure.md)
+    --- Physical source-tree organization, domain purity, and the
+    Module concept (Forge, Studio).
+-   [`context/technology-and-test-strategy.md`](context/technology-and-test-strategy.md)
+    --- The accepted technology baseline and testing layers.
+-   [`context/deployment-and-desktop.md`](context/deployment-and-desktop.md)
+    --- Headless and desktop deployment shapes.
 
 ### Architecture Decisions
 
@@ -85,8 +86,8 @@ and `docs/domains/` into one file per bounded concept (see
 -   [`context/authorization-policy.md`](context/authorization-policy.md)
     --- Detailed explanation of policy, authorization, and execution
     boundaries.
--   [`architecture/CONFIGURATION-ARCHITECTURE.md`](architecture/CONFIGURATION-ARCHITECTURE.md)
-    --- Effective configuration model, precedence, and runtime surface.
+-   [`context/configuration.md`](context/configuration.md) --- Effective
+    configuration model, precedence, and runtime surface.
 
 ## Documentation Layers
 
@@ -95,11 +96,7 @@ ARCHITECTURAL CONTRACT
         ↓
 ARCHITECTURE
         ↓
-COMPONENTS
-        ↓
-DOMAINS
-        ↓
-ARCHITECTURE IMPLEMENTATION
+CONTEXT DOCUMENTATION
         ↓
 DECISIONS
         ↓
