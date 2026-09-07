@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
+from orchai.application.conversations.ports import (
+    ConversationAIProviderPort,
+    ConversationCompletionRequest,
+    ConversationCompletionResult,
+    ConversationStreamChunk,
+)
 from orchai.application.executions.ports import (
     AIProviderExecutionRequest,
     AIProviderExecutionResult,
     AIProviderHealthCheck,
     AIProviderPort,
+    AIProviderStreamChunk,
 )
 
 
-class StubAIProviderAdapter(AIProviderPort):
+class StubAIProviderAdapter(AIProviderPort, ConversationAIProviderPort):
     """Provider adapter that returns a deterministic summary."""
 
     async def capabilities(self) -> frozenset[str]:
@@ -47,5 +56,32 @@ class StubAIProviderAdapter(AIProviderPort):
             },
         )
 
+    async def execute_stream(
+        self,
+        request: AIProviderExecutionRequest,
+    ) -> AsyncIterator[AIProviderStreamChunk]:
+        context_count = len(request.context)
+        text = f"Stub provider processed {context_count} authorized context item(s)."
+        yield AIProviderStreamChunk(delta=text)
+        yield AIProviderStreamChunk(delta="", finished=True, finish_reason="stop")
+
     async def cancel(self, execution_id) -> None:
         return None
+
+    async def complete(
+        self,
+        request: ConversationCompletionRequest,
+    ) -> ConversationCompletionResult:
+        return ConversationCompletionResult(
+            content=f"Stub provider processed {len(request.history)} message(s).",
+            provider_name="stub",
+        )
+
+    async def complete_stream(
+        self,
+        request: ConversationCompletionRequest,
+    ) -> AsyncIterator[ConversationStreamChunk]:
+        text = f"Stub provider processed {len(request.history)} message(s)."
+        for word in text.split(" "):
+            yield ConversationStreamChunk(delta=word + " ", provider_name="stub")
+        yield ConversationStreamChunk(delta="", finished=True, provider_name="stub")

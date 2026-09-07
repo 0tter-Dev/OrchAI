@@ -80,26 +80,32 @@ Interpretation:
 
 ### AI provider
 
+Since ADR-013, the single `litellm` provider covers every real backend
+(OpenAI, Anthropic, Gemini, Ollama, and other OpenAI-compatible local
+runtimes) -- which one is actually used is selected by
+`ORCHAI_AI_MODEL`'s `"<provider>/<model>"` prefix, not by
+`ORCHAI_AI_PROVIDER` itself.
+
 Local stub:
 
 ```powershell
 $env:ORCHAI_AI_PROVIDER = "stub"
 ```
 
-Local Ollama:
+Local Ollama model:
 
 ```powershell
-$env:ORCHAI_AI_PROVIDER = "ollama"
+$env:ORCHAI_AI_PROVIDER = "litellm"
 $env:ORCHAI_AI_BASE_URL = "http://localhost:11434"
-$env:ORCHAI_AI_MODEL = "qwen2.5-coder:latest"
+$env:ORCHAI_AI_MODEL = "ollama/qwen2.5-coder:latest"
 ```
 
-Cloud OpenAI/Codex-style provider:
+Cloud model, e.g. OpenAI:
 
 ```powershell
-$env:ORCHAI_AI_PROVIDER = "openai"
+$env:ORCHAI_AI_PROVIDER = "litellm"
 $env:ORCHAI_AI_API_KEY = "your_api_key"
-$env:ORCHAI_AI_MODEL = "gpt-5-codex"
+$env:ORCHAI_AI_MODEL = "openai/gpt-5"
 ```
 
 Operational checks:
@@ -224,9 +230,9 @@ For a service-like external integration:
 
 ```powershell
 $env:ORCHAI_DATABASE_URL = "postgresql://orchai:password@localhost:5432/orchai"
-$env:ORCHAI_AI_PROVIDER = "ollama"
+$env:ORCHAI_AI_PROVIDER = "litellm"
 $env:ORCHAI_AI_BASE_URL = "http://localhost:11434"
-$env:ORCHAI_AI_MODEL = "qwen2.5-coder:latest"
+$env:ORCHAI_AI_MODEL = "ollama/qwen2.5-coder:latest"
 uv run orchai db sync
 uv run orchai runtime check
 uv run orchai api serve
@@ -376,7 +382,17 @@ Policy approval does not override:
 
 ### Tests fail on Windows temp directories
 
-Use a unique writable `--basetemp` path:
+The root `conftest.py` now defaults `--basetemp` to `.cache/pytest-tmp`
+automatically (a fresh, project-local directory), specifically because
+the system-wide default (`%TEMP%/pytest-of-<user>`) has a broken ACL in
+some Windows checkouts of this project -- created under a different
+Windows account/session, denying access to every account tested since.
+Plain `pytest` / `uv run pytest` should work with no flags needed.
+
+If you still want a different location (e.g. to inspect fixture output
+after a run, or because `.cache/pytest-tmp` itself is inaccessible in
+your environment for the same reason), pass `--basetemp` explicitly to
+override the default:
 
 ```powershell
 $timestamp = Get-Date -Format "yyyyMMddHHmmss"
@@ -391,7 +407,9 @@ matter:
 
 - the API and CLI cover the current foundation, not the full future product vision;
 - policy configuration is still a local/runtime-first slice, not a full policy engine;
-- provider integration currently covers `stub`, `Ollama`, and an initial OpenAI/Codex-style adapter;
+- provider integration currently covers `stub` and the multi-provider
+  `litellm` adapter (OpenAI, Anthropic, Gemini, Ollama, and other
+  OpenAI-compatible runtimes, ADR-013);
 - the local filesystem adapter remains the primary project adapter;
 - the current staged task-centric flow is implemented, but richer
   multi-user orchestration and broader automation patterns are still

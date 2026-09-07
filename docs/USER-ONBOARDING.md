@@ -133,7 +133,11 @@ changing CI/CD.
 ## AI provider configuration
 
 The runtime now supports explicit provider selection through
-configuration.
+configuration. Since ADR-013, the single `litellm` provider covers
+every real backend (OpenAI, Anthropic, Gemini, Ollama, and other
+OpenAI-compatible local runtimes) -- which one is used is selected by
+`ORCHAI_AI_MODEL`'s `"<provider>/<model>"` prefix, not by
+`ORCHAI_AI_PROVIDER` itself.
 
 Local stub provider:
 
@@ -141,20 +145,20 @@ Local stub provider:
 $env:ORCHAI_AI_PROVIDER = "stub"
 ```
 
-Local Ollama provider:
+Local Ollama model (via litellm):
 
 ```powershell
-$env:ORCHAI_AI_PROVIDER = "ollama"
+$env:ORCHAI_AI_PROVIDER = "litellm"
 $env:ORCHAI_AI_BASE_URL = "http://localhost:11434"
-$env:ORCHAI_AI_MODEL = "qwen2.5-coder:latest"
+$env:ORCHAI_AI_MODEL = "ollama/qwen2.5-coder:latest"
 ```
 
-Cloud OpenAI/Codex-style provider:
+Cloud model, e.g. OpenAI (via litellm):
 
 ```powershell
-$env:ORCHAI_AI_PROVIDER = "openai"
+$env:ORCHAI_AI_PROVIDER = "litellm"
 $env:ORCHAI_AI_API_KEY = "your_api_key"
-$env:ORCHAI_AI_MODEL = "gpt-5-codex"
+$env:ORCHAI_AI_MODEL = "openai/gpt-5"
 ```
 
 Inspect the effective provider configuration safely:
@@ -495,7 +499,8 @@ Current gaps to keep in mind:
 - policy configuration is still a local/runtime-first slice, not a full
   policy engine;
 - provider integration currently covers the adapter boundary plus
-  `stub`, `Ollama`, and an initial OpenAI/Codex-style cloud adapter;
+  `stub` and the multi-provider `litellm` adapter (OpenAI, Anthropic,
+  Gemini, Ollama, and other OpenAI-compatible runtimes, ADR-013);
 - project integration is currently centered on the local filesystem
   adapter;
 - the staged task-centric workflow is implemented, but broader multi-user

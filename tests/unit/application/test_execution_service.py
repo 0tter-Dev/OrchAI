@@ -21,7 +21,7 @@ from orchai.domain.authorization import (
     AuthorizationNotGrantedError,
 )
 from orchai.domain.events import EventType
-from orchai.domain.executions import ExecutionState
+from orchai.domain.executions import ExecutionState, InvalidExecutionStateTransitionError
 from orchai.domain.identifiers import ModelId, TaskId
 from orchai.domain.roles import RoleName
 from orchai.domain.tasks import ExecutionMode
@@ -251,6 +251,111 @@ def test_execution_service_records_completion_result() -> None:
         assert completed.result is not None
         assert completed.result.output == "Implemented."
         assert events.published_events[-1].event_type is EventType.EXECUTION_COMPLETED
+
+    asyncio.run(run())
+
+
+def test_execution_service_cancel_execution_transitions_and_publishes_event() -> None:
+    async def run() -> None:
+        authorization_repository = InMemoryAuthorizationRepository()
+        execution_repository = InMemoryExecutionRepository()
+        events = InProcessEventDispatcher()
+        authorization_service = AuthorizationService(
+            repository=authorization_repository,
+            event_publisher=events,
+        )
+        execution_service = ExecutionService(
+            repository=execution_repository,
+            authorization_repository=authorization_repository,
+            event_publisher=events,
+        )
+        task_id = TaskId.new()
+        model_id = ModelId("codex")
+        authorization = await authorization_service.request_authorization(
+            RequestAuthorizationCommand(
+                task_id=task_id,
+                role=RoleName.DEVELOPER,
+                action=ActionName.IMPLEMENT,
+                model_id=model_id,
+                reason="Implement the requested task.",
+                requester="user",
+                execution_mode=ExecutionMode.SUGGESTED,
+            )
+        )
+        await authorization_service.decide_authorization(
+            DecideAuthorizationCommand(
+                authorization_id=authorization.id,
+                status=AuthorizationDecisionStatus.GRANTED,
+                decided_by="user",
+                reason="Approved.",
+            )
+        )
+        execution = await execution_service.request_execution(
+            RequestExecutionCommand(
+                task_id=task_id,
+                role=RoleName.DEVELOPER,
+                action=ActionName.IMPLEMENT,
+                model_id=model_id,
+                authorization_id=authorization.id,
+            )
+        )
+
+        cancelled = await execution_service.cancel_execution(execution.id)
+
+        assert cancelled.state is ExecutionState.CANCELLED
+        assert events.published_events[-1].event_type is EventType.EXECUTION_CANCELLED
+
+    asyncio.run(run())
+
+
+def test_execution_service_cancel_execution_rejects_an_already_terminal_execution() -> None:
+    async def run() -> None:
+        authorization_repository = InMemoryAuthorizationRepository()
+        execution_repository = InMemoryExecutionRepository()
+        events = InProcessEventDispatcher()
+        authorization_service = AuthorizationService(
+            repository=authorization_repository,
+            event_publisher=events,
+        )
+        execution_service = ExecutionService(
+            repository=execution_repository,
+            authorization_repository=authorization_repository,
+            event_publisher=events,
+        )
+        task_id = TaskId.new()
+        model_id = ModelId("codex")
+        authorization = await authorization_service.request_authorization(
+            RequestAuthorizationCommand(
+                task_id=task_id,
+                role=RoleName.DEVELOPER,
+                action=ActionName.IMPLEMENT,
+                model_id=model_id,
+                reason="Implement the requested task.",
+                requester="user",
+                execution_mode=ExecutionMode.SUGGESTED,
+            )
+        )
+        await authorization_service.decide_authorization(
+            DecideAuthorizationCommand(
+                authorization_id=authorization.id,
+                status=AuthorizationDecisionStatus.GRANTED,
+                decided_by="user",
+                reason="Approved.",
+            )
+        )
+        execution = await execution_service.request_execution(
+            RequestExecutionCommand(
+                task_id=task_id,
+                role=RoleName.DEVELOPER,
+                action=ActionName.IMPLEMENT,
+                model_id=model_id,
+                authorization_id=authorization.id,
+            )
+        )
+        await execution_service.cancel_execution(execution.id)
+
+        with pytest.raises(InvalidExecutionStateTransitionError):
+            await execution_service.cancel_execution(execution.id)
 
     asyncio.run(run())
 

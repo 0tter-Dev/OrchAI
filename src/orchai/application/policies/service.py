@@ -4,8 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from orchai.application.policies.ports import PolicyDecision, PolicyOperation, PolicyPort
+from orchai.application.events.ports import EventPublisher
+from orchai.application.policies.ports import (
+    AutomaticPolicyRepository,
+    PolicyDecision,
+    PolicyOperation,
+    PolicyPort,
+)
 from orchai.domain.actions import ActionName
+from orchai.domain.events import DomainEvent, EventType
 from orchai.domain.projects import (
     ProjectOperation,
     ProjectReadinessLevel,
@@ -39,21 +46,44 @@ class AutomaticExecutionPolicy:
 
 
 class LocalPolicyService(PolicyPort):
-    """Decision layer that remains separate from authorization."""
+    """Decision layer that remains separate from authorization.
+
+    ``automatic_policy`` freezes a static policy for the lifetime of the
+    instance (used by callers that construct an ad-hoc, per-call override,
+    e.g. ``Orchestrator``'s ``command.automatic_policy`` path, and by tests
+    that want a deterministic policy without touching persistence).
+    ``automatic_policy_repository`` instead makes the policy runtime-mutable:
+    ``evaluate()`` re-reads it from the repository on every call, so a
+    ``PUT /policies/automatic`` takes effect immediately, without a process
+    restart. Passing neither keeps the previous default behavior (a
+    conservative, code-level ``AutomaticExecutionPolicy()``). Passing both is
+    not meaningful; ``automatic_policy`` wins if both are given.
+    """
 
     def __init__(
         self,
         *,
         automatic_policy: AutomaticExecutionPolicy | None = None,
+        automatic_policy_repository: AutomaticPolicyRepository | None = None,
     ) -> None:
-        self._automatic_policy = automatic_policy or AutomaticExecutionPolicy()
+        self._static_policy = automatic_policy
+        self._automatic_policy_repository = automatic_policy_repository
+
+    async def _resolve_automatic_policy(self) -> AutomaticExecutionPolicy:
+        if self._static_policy is not None:
+            return self._static_policy
+        if self._automatic_policy_repository is not None:
+            return await self._automatic_policy_repository.get()
+        return AutomaticExecutionPolicy()
 
     async def evaluate(self, operation: PolicyOperation) -> PolicyDecision:
-        model_decision = self._evaluate_model_selection(operation)
+        automatic_policy = await self._resolve_automatic_policy()
+
+        model_decision = self._evaluate_model_selection(operation, automatic_policy)
         if not model_decision.allowed:
             return model_decision
 
-        context_decision = self._evaluate_context_scope(operation)
+        context_decision = self._evaluate_context_scope(operation, automatic_policy)
         if not context_decision.allowed:
             return context_decision
 
@@ -64,7 +94,7 @@ class LocalPolicyService(PolicyPort):
         if (
             operation.previous_role is not None
             and operation.previous_role is not operation.role
-            and not self._automatic_policy.allows_cross_role_transition(
+            and not automatic_policy.allows_cross_role_transition(
                 operation.previous_role,
                 operation.role,
             )
@@ -103,7 +133,7 @@ class LocalPolicyService(PolicyPort):
                 return readiness_decision
             return PolicyDecision(allowed=True, reason="suggested_mode_approved")
 
-        if self._automatic_policy.allows_operation(operation.role, operation.action):
+        if automatic_policy.allows_operation(operation.role, operation.action):
             readiness_decision = self._evaluate_project_readiness(operation)
             if not readiness_decision.allowed:
                 return readiness_decision
@@ -117,10 +147,14 @@ class LocalPolicyService(PolicyPort):
             reason="automatic_policy_denied",
         )
 
-    def _evaluate_model_selection(self, operation: PolicyOperation) -> PolicyDecision:
+    def _evaluate_model_selection(
+        self,
+        operation: PolicyOperation,
+        automatic_policy: AutomaticExecutionPolicy,
+    ) -> PolicyDecision:
         if operation.requested_model == operation.effective_model:
             return PolicyDecision(allowed=True, reason="model_selection_allowed")
-        if self._automatic_policy.allow_model_substitution:
+        if automatic_policy.allow_model_substitution:
             return PolicyDecision(allowed=True, reason="model_substitution_allowed")
         return PolicyDecision(
             allowed=False,
@@ -131,7 +165,11 @@ class LocalPolicyService(PolicyPort):
             },
         )
 
-    def _evaluate_context_scope(self, operation: PolicyOperation) -> PolicyDecision:
+    def _evaluate_context_scope(
+        self,
+        operation: PolicyOperation,
+        automatic_policy: AutomaticExecutionPolicy,
+    ) -> PolicyDecision:
         requested = set(operation.requested_context)
         authorized = set(operation.authorized_context)
         if not authorized.issubset(requested):
@@ -139,7 +177,7 @@ class LocalPolicyService(PolicyPort):
                 allowed=False,
                 reason="authorized_context_must_be_subset_of_requested",
             )
-        if authorized == requested or self._automatic_policy.allow_context_expansion:
+        if authorized == requested or automatic_policy.allow_context_expansion:
             return PolicyDecision(allowed=True, reason="context_scope_allowed")
         return PolicyDecision(allowed=True, reason="context_scope_allowed")
 
@@ -192,3 +230,55 @@ class LocalPolicyService(PolicyPort):
             )
 
         return PolicyDecision(allowed=True, reason="project_readiness_allowed")
+
+
+class AutomaticPolicyService:
+    """Read/write use cases for the persisted automatic-mode policy.
+
+    Kept separate from `LocalPolicyService`, which only ever *reads* the
+    policy (via `AutomaticPolicyRepository.get()`) while evaluating an
+    operation: `evaluate()` runs on every gated request and must never have
+    a side effect like publishing an event. Writing a new policy is a
+    deliberate, occasional administrative action, so it goes through this
+    service instead, mirroring how every other application service
+    (`TaskService`, `ProjectService`, ...) pairs a repository write with a
+    domain event for `docs/architecture/CHAT-FIRST-REQUEST-MODEL.md`'s
+    auditability guarantee.
+    """
+
+    def __init__(
+        self,
+        *,
+        repository: AutomaticPolicyRepository,
+        event_publisher: EventPublisher,
+    ) -> None:
+        self._repository = repository
+        self._event_publisher = event_publisher
+
+    async def get_automatic_policy(self) -> AutomaticExecutionPolicy:
+        return await self._repository.get()
+
+    async def set_automatic_policy(
+        self,
+        policy: AutomaticExecutionPolicy,
+    ) -> AutomaticExecutionPolicy:
+        await self._repository.set(policy)
+        await self._event_publisher.publish(
+            DomainEvent(
+                event_type=EventType.AUTOMATIC_POLICY_UPDATED,
+                source="application.policies",
+                payload={
+                    "allowed_operations": [
+                        f"{role.value}:{action.value}"
+                        for role, action in policy.allowed_operations
+                    ],
+                    "allowed_cross_role_transitions": [
+                        f"{previous.value}:{next_role.value}"
+                        for previous, next_role in policy.allowed_cross_role_transitions
+                    ],
+                    "allow_model_substitution": str(policy.allow_model_substitution),
+                    "allow_context_expansion": str(policy.allow_context_expansion),
+                },
+            )
+        )
+        return policy

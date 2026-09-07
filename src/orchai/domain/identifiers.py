@@ -108,3 +108,21 @@ class PermissionId(Identifier):
 
 class RefreshTokenId(Identifier):
     """Stable refresh token identity."""
+
+
+class ModuleId(Identifier):
+    """Stable Module identity (ADR-015).
+
+    Unlike most identifiers here, values are stable slugs (e.g. "forge"),
+    not generated UUIDs -- `ModuleDefinition`s are a fixed, code-defined
+    vocabulary (`application/modules/registry.py`), the same treatment
+    already given to `RoleName`/`ActionName`.
+    """
+
+
+class ConversationId(Identifier):
+    """Stable conversation identity (ADR-014)."""
+
+
+class MessageId(Identifier):
+    """Stable message identity (ADR-014)."""

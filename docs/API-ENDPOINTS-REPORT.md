@@ -36,8 +36,8 @@ A API é dividida em duas superfícies (ADR-011): `/requests/*` é a superfície
 | `GET /health` | ✅ | Health check simples | Retorna `{"status": "ok", "version": "0.1.11"}`. Não valida banco nem provider. |
 | `GET /settings/runtime` | ✅ | Diagnóstico de configuração | Mostra a configuração efetiva resolvida (banco, provider de IA, host/porta da API) — útil para confirmar qual banco/URL está realmente em uso antes de operar. |
 | `GET /runtime/check` | ✅ | Diagnóstico consolidado | Testa conectividade real com o banco (`SELECT 1`) e healthcheck do provider de IA configurado, retornando `ready: true/false` e avisos (`warnings`) quando algo não está pronto para produção. |
-| `GET /providers/settings` | ✅ | Configuração do provider de IA | Mostra qual provider está configurado (`stub`, `ollama`, `openai`), modelo, timeout, se a API key está presente — sem expor a chave em si. |
-| `GET /providers/capabilities` | ✅ | Capacidades declaradas | Lista as capacidades que o provider afirma suportar (ex: `read_project`, `write_source`). Hoje só o provider `stub` está implementado de fato; `ollama`/`openai` existem como adapters mas ainda não foram plugados como opção real de execução (é exatamente o próximo passo). |
+| `GET /providers/settings` | ✅ | Configuração do provider de IA | Mostra qual provider está configurado (`stub` ou `litellm`), modelo, timeout, se a API key está presente — sem expor a chave em si. |
+| `GET /providers/capabilities` | ✅ | Capacidades declaradas | Lista as capacidades que o provider afirma suportar. Desde a ADR-013, o provider `litellm` é a única implementação real (cobre OpenAI, Anthropic, Gemini, Ollama e outros runtimes compatíveis com a API da OpenAI através de um único adapter); `stub` continua disponível para smoke tests locais. |
 | `GET /providers/health` | ✅ | Healthcheck do provider | Faz uma checagem de alcançabilidade real contra o provider configurado. |
 
 ## 2. Administração de Banco

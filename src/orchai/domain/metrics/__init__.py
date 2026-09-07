@@ -1,5 +1,5 @@
 """Metrics domain objects."""
 
-from orchai.domain.metrics.entities import MetricRecord
+from orchai.domain.metrics.entities import MetricRecord, MetricSummary
 
-__all__ = ["MetricRecord"]
+__all__ = ["MetricRecord", "MetricSummary"]

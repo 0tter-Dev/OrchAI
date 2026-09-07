@@ -34,13 +34,14 @@ from orchai.application.identity import (
     SetPermissionsForRoleCommand,
     UpdateUserProfileCommand,
 )
+from orchai.application.modules import list_modules
 from orchai.application.orchestration import (
     TaskWorkflowStage,
     run_local_flow,
     run_project_operation,
     run_task_workflow_stage,
 )
-from orchai.application.policies import PolicyOperation
+from orchai.application.policies import AutomaticExecutionPolicy, PolicyOperation
 from orchai.application.projects import (
     RegisterProjectCommand,
     UpdateProjectSecurityCommand,
@@ -108,11 +109,13 @@ tasks_app = typer.Typer(help="Task state operations.")
 authorizations_app = typer.Typer(help="Authorization record operations.")
 executions_app = typer.Typer(help="Execution state operations.")
 policies_app = typer.Typer(help="Policy evaluation operations.")
+automatic_policy_app = typer.Typer(help="Automatic-mode execution policy configuration.")
 audit_app = typer.Typer(help="Audit history operations.")
 events_app = typer.Typer(help="Event history operations.")
 metrics_app = typer.Typer(help="Operational metrics operations.")
 suggestions_app = typer.Typer(help="Suggestion operations.")
 projects_app = typer.Typer(help="Project adapter operations.")
+modules_app = typer.Typer(help="Module registry operations (ADR-015).")
 providers_app = typer.Typer(help="AI provider runtime operations.")
 runtime_app = typer.Typer(help="Consolidated runtime operational checks.")
 api_app = typer.Typer(help="HTTP API operations.")
@@ -131,11 +134,13 @@ app.add_typer(tasks_app, name="tasks")
 app.add_typer(authorizations_app, name="authorizations")
 app.add_typer(executions_app, name="executions")
 app.add_typer(policies_app, name="policies")
+policies_app.add_typer(automatic_policy_app, name="automatic")
 app.add_typer(audit_app, name="audit")
 app.add_typer(events_app, name="events")
 app.add_typer(metrics_app, name="metrics")
 app.add_typer(suggestions_app, name="suggestions")
 app.add_typer(projects_app, name="projects")
+app.add_typer(modules_app, name="modules")
 app.add_typer(providers_app, name="providers")
 app.add_typer(runtime_app, name="runtime")
 app.add_typer(api_app, name="api")
@@ -865,7 +870,7 @@ def chat_request(
         ProviderTarget.LOCAL,
         "--provider-target",
         case_sensitive=False,
-        help="LOCAL (Ollama) or CLOUD (configured cloud adapter).",
+        help="LOCAL (e.g. Ollama via litellm) or CLOUD (configured cloud provider).",
     ),
     execution_mode: ExecutionMode = typer.Option(
         ExecutionMode.SUGGESTED,
@@ -1864,6 +1869,26 @@ def transition_execution(
     )
 
 
+@executions_app.command("cancel")
+def cancel_execution(
+    execution_id: str = typer.Argument(..., help="Persisted execution id."),
+    database_url: str | None = typer.Option(
+        None,
+        "--database-url",
+        help="Database URL. Defaults to ORCHAI_DATABASE_URL, or PostgreSQL (postgresql://orchai:orchai@localhost:5432/orchai) when unset. Pass sqlite:///... or the 'sqlite' shorthand for fast local/test runs.",
+    ),
+) -> None:
+    """Cancel one execution -- a no-op if it has already finished on its own."""
+
+    require_cli_permission("executions:manage")
+    settings = load_settings()
+    url = database_url or settings.database.sqlalchemy_url
+    runtime = build_sqlalchemy_runtime(url)
+    execution = asyncio.run(runtime.execution_engine.cancel(ExecutionId(execution_id)))
+    typer.echo(f"execution_id={execution.id}")
+    typer.echo(f"state={execution.state.value}")
+
+
 @executions_app.command("complete")
 def complete_execution(
     execution_id: str = typer.Argument(..., help="Persisted execution id."),
@@ -2253,6 +2278,74 @@ def evaluate_policy(
     )
 
 
+@automatic_policy_app.command("show")
+def show_automatic_policy(
+    database_url: str | None = typer.Option(
+        None,
+        "--database-url",
+        help="Database URL. Defaults to ORCHAI_DATABASE_URL, or PostgreSQL (postgresql://orchai:orchai@localhost:5432/orchai) when unset. Pass sqlite:///... or the 'sqlite' shorthand for fast local/test runs.",
+    ),
+) -> None:
+    """Show the persisted automatic-mode execution policy."""
+
+    require_cli_permission("policies:evaluate")
+    settings = load_settings()
+    url = database_url or settings.database.sqlalchemy_url
+    runtime = build_sqlalchemy_runtime(url)
+    policy = asyncio.run(runtime.automatic_policy_service.get_automatic_policy())
+    _echo_automatic_policy(policy)
+
+
+@automatic_policy_app.command("set")
+def set_automatic_policy(
+    allowed_operations: str = typer.Option(
+        "",
+        "--allow-operation",
+        help="Comma-separated role:action pairs allowed to run automatically, e.g. DEVELOPER:IMPLEMENT,QUALITY_AGENT:TEST.",
+    ),
+    allowed_cross_role_transitions: str = typer.Option(
+        "",
+        "--allow-cross-role-transition",
+        help="Comma-separated previous_role:next_role pairs allowed to transition automatically.",
+    ),
+    allow_model_substitution: bool = typer.Option(
+        False,
+        "--allow-model-substitution/--no-allow-model-substitution",
+        help="Whether an automatic operation may substitute the requested model.",
+    ),
+    allow_context_expansion: bool = typer.Option(
+        False,
+        "--allow-context-expansion/--no-allow-context-expansion",
+        help="Whether an automatic operation may expand its authorized context beyond what was requested.",
+    ),
+    database_url: str | None = typer.Option(
+        None,
+        "--database-url",
+        help="Database URL. Defaults to ORCHAI_DATABASE_URL, or PostgreSQL (postgresql://orchai:orchai@localhost:5432/orchai) when unset. Pass sqlite:///... or the 'sqlite' shorthand for fast local/test runs.",
+    ),
+) -> None:
+    """Replace the persisted automatic-mode execution policy."""
+
+    require_cli_permission("policies:manage")
+    settings = load_settings()
+    url = database_url or settings.database.sqlalchemy_url
+    runtime = build_sqlalchemy_runtime(url)
+    policy = AutomaticExecutionPolicy(
+        allowed_operations=tuple(
+            _parse_role_action_pair(entry)
+            for entry in _parse_csv_tuple(allowed_operations) or ()
+        ),
+        allowed_cross_role_transitions=tuple(
+            _parse_role_role_pair(entry)
+            for entry in _parse_csv_tuple(allowed_cross_role_transitions) or ()
+        ),
+        allow_model_substitution=allow_model_substitution,
+        allow_context_expansion=allow_context_expansion,
+    )
+    updated = asyncio.run(runtime.automatic_policy_service.set_automatic_policy(policy))
+    _echo_automatic_policy(updated)
+
+
 @events_app.command("list")
 def list_events(
     task_id: str | None = typer.Option(
@@ -2370,6 +2463,74 @@ def list_metrics(
                     f"task_id={record.task_id or ''}",
                     f"project_id={record.project_id or ''}",
                     f"execution_id={record.execution_id or ''}",
+                )
+            )
+        )
+
+
+@metrics_app.command("summary")
+def summarize_metrics(
+    project_id: str | None = typer.Option(
+        None,
+        "--project-id",
+        help="Filter metrics by project id.",
+    ),
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        help="Filter metrics by metric name.",
+    ),
+    since: datetime | None = typer.Option(
+        None,
+        "--since",
+        help="Only include metrics observed at or after this timestamp.",
+    ),
+    until: datetime | None = typer.Option(
+        None,
+        "--until",
+        help="Only include metrics observed at or before this timestamp.",
+    ),
+    group_by: str = typer.Option(
+        "",
+        "--group-by",
+        help="Comma-separated dimensions to group by: project_id, role, action, model_id, outcome.",
+    ),
+    database_url: str | None = typer.Option(
+        None,
+        "--database-url",
+        help="Database URL. Defaults to ORCHAI_DATABASE_URL, or PostgreSQL (postgresql://orchai:orchai@localhost:5432/orchai) when unset. Pass sqlite:///... or the 'sqlite' shorthand for fast local/test runs.",
+    ),
+) -> None:
+    """Aggregate (count/sum/avg) metrics, one line per (name, group) bucket."""
+
+    require_cli_permission("projects:read")
+    settings = load_settings()
+    url = database_url or settings.database.sqlalchemy_url
+    runtime = build_sqlalchemy_runtime(url)
+    try:
+        summaries = asyncio.run(
+            runtime.metrics_repository.summarize(
+                project_id=ProjectId(project_id) if project_id is not None else None,
+                name=name,
+                since=since,
+                until=until,
+                group_by=_parse_csv_tuple(group_by) or (),
+            )
+        )
+    except ValueError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    for summary in summaries:
+        dimensions = ",".join(f"{key}={value}" for key, value in summary.dimensions.items())
+        typer.echo(
+            " ".join(
+                (
+                    f"name={summary.name}",
+                    f"unit={summary.unit}",
+                    f"count={summary.count}",
+                    f"sum={summary.sum}",
+                    f"avg={summary.avg}",
+                    f"dimensions={dimensions}",
                 )
             )
         )
@@ -3086,6 +3247,27 @@ def update_project_security(
     typer.echo("updated=true")
 
 
+@modules_app.command("list")
+def list_modules_command() -> None:
+    """List registered Modules (Forge, Studio, ...) — ADR-015."""
+
+    require_cli_permission()
+    modules = list_modules()
+    typer.echo(f"modules={len(modules)}")
+    for module in modules:
+        typer.echo(
+            " ".join(
+                (
+                    f"module_id={module.id}",
+                    f"name={module.name}",
+                    f"requires_project={str(module.requires_project).lower()}",
+                    f"project_adapter_kind={module.project_adapter_kind}",
+                    f"task_pipeline_mode={module.task_pipeline_mode}",
+                )
+            )
+        )
+
+
 @providers_app.command("show")
 def show_provider() -> None:
     """Show effective AI provider settings without exposing secrets."""
@@ -3226,6 +3408,34 @@ def _parse_csv_tuple(value: str | None) -> tuple[str, ...] | None:
         return None
     items = [item.strip() for item in value.split(",")]
     return tuple(item for item in items if item)
+
+
+def _parse_role_action_pair(entry: str) -> tuple[RoleName, ActionName]:
+    role_value, _, action_value = entry.partition(":")
+    return RoleName(role_value), ActionName(action_value)
+
+
+def _parse_role_role_pair(entry: str) -> tuple[RoleName, RoleName]:
+    previous_value, _, next_value = entry.partition(":")
+    return RoleName(previous_value), RoleName(next_value)
+
+
+def _echo_automatic_policy(policy: AutomaticExecutionPolicy) -> None:
+    typer.echo(
+        "allowed_operations="
+        + ",".join(
+            f"{role.value}:{action.value}" for role, action in policy.allowed_operations
+        )
+    )
+    typer.echo(
+        "allowed_cross_role_transitions="
+        + ",".join(
+            f"{previous.value}:{next_role.value}"
+            for previous, next_role in policy.allowed_cross_role_transitions
+        )
+    )
+    typer.echo(f"allow_model_substitution={str(policy.allow_model_substitution).lower()}")
+    typer.echo(f"allow_context_expansion={str(policy.allow_context_expansion).lower()}")
 
 
 def _parse_metadata_json(value: str | None) -> dict[str, Any]:

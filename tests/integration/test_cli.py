@@ -330,6 +330,66 @@ def test_cli_local_flow_runs_with_sqlite_database(tmp_path) -> None:
     assert "resource=docs/INDEX.md" in execution_context_result.output
 
 
+def test_cli_metrics_summary_aggregates(tmp_path) -> None:
+    (tmp_path / ".git").mkdir()
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "INDEX.md").write_text("# Project\n\nUseful context.", encoding="utf-8")
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    runner = CliRunner()
+
+    flow_result = runner.invoke(
+        app,
+        [
+            "local-flow",
+            str(tmp_path),
+            "docs/INDEX.md",
+            "--title",
+            "CLI metrics summary flow",
+            "--database-url",
+            database_url,
+            "--approve-suggestion",
+        ],
+    )
+    assert flow_result.exit_code == 0
+    project_id = _output_value(flow_result.output, "project_id")
+
+    summary_result = runner.invoke(
+        app,
+        [
+            "metrics",
+            "summary",
+            "--database-url",
+            database_url,
+            "--project-id",
+            project_id,
+            "--name",
+            "execution.success",
+            "--group-by",
+            "role,action",
+        ],
+    )
+    assert summary_result.exit_code == 0
+    assert "name=execution.success" in summary_result.output
+    assert "count=1" in summary_result.output
+    assert "sum=1.0" in summary_result.output
+    assert "dimensions=role=TASK_PLANNER,action=PLAN" in summary_result.output
+
+    invalid_result = runner.invoke(
+        app,
+        [
+            "metrics",
+            "summary",
+            "--database-url",
+            database_url,
+            "--group-by",
+            "not_a_real_field",
+        ],
+    )
+    assert invalid_result.exit_code == 1
+    assert "error:" in invalid_result.output
+
+
 def test_cli_local_flow_suggested_mode_requires_approval(tmp_path) -> None:
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -632,6 +692,48 @@ def test_cli_policies_evaluate_reports_allowed_and_blocked_cases(tmp_path) -> No
     assert "reason=suggested_mode_requires_approval" in blocked_result.output
 
 
+def test_cli_policies_automatic_show_and_set_round_trip(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    runner = CliRunner()
+
+    default_result = runner.invoke(
+        app,
+        ["policies", "automatic", "show", "--database-url", database_url],
+    )
+    assert default_result.exit_code == 0
+    assert "allowed_operations=DEVELOPER:IMPLEMENT" in default_result.output
+    assert "allow_model_substitution=false" in default_result.output
+
+    set_result = runner.invoke(
+        app,
+        [
+            "policies",
+            "automatic",
+            "set",
+            "--allow-operation",
+            "DEVELOPER:IMPLEMENT,QUALITY_AGENT:TEST",
+            "--allow-cross-role-transition",
+            "DEVELOPER:QUALITY_AGENT",
+            "--allow-model-substitution",
+            "--database-url",
+            database_url,
+        ],
+    )
+    assert set_result.exit_code == 0
+    assert "allowed_operations=DEVELOPER:IMPLEMENT,QUALITY_AGENT:TEST" in set_result.output
+    assert (
+        "allowed_cross_role_transitions=DEVELOPER:QUALITY_AGENT" in set_result.output
+    )
+    assert "allow_model_substitution=true" in set_result.output
+
+    show_after_set_result = runner.invoke(
+        app,
+        ["policies", "automatic", "show", "--database-url", database_url],
+    )
+    assert show_after_set_result.exit_code == 0
+    assert set_result.output == show_after_set_result.output
+
+
 def test_cli_direct_task_and_execution_lifecycle_commands(tmp_path) -> None:
     (tmp_path / ".git").mkdir()
     (tmp_path / "README.md").write_text("Project docs", encoding="utf-8")
@@ -831,6 +933,139 @@ def test_cli_direct_task_and_execution_lifecycle_commands(tmp_path) -> None:
     assert resolve_context_result.exit_code == 0
     assert "context_items=1" in resolve_context_result.output
     assert "resource=README.md" in resolve_context_result.output
+
+
+def test_cli_executions_cancel_command(tmp_path) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "README.md").write_text("Project docs", encoding="utf-8")
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    runner = CliRunner()
+
+    project_id = _output_value(
+        runner.invoke(
+            app, ["projects", "register", str(tmp_path), "--database-url", database_url]
+        ).output,
+        "project_id",
+    )
+    task_id = _output_value(
+        runner.invoke(
+            app,
+            [
+                "tasks",
+                "create",
+                "--database-url",
+                database_url,
+                "--title",
+                "Cancel target",
+                "--description",
+                "Created through CLI",
+                "--requested-change",
+                "N/A",
+                "--project-id",
+                project_id,
+                "--execution-mode",
+                "SUGGESTED",
+            ],
+        ).output,
+        "task_id",
+    )
+    runner.invoke(
+        app,
+        [
+            "tasks",
+            "transition",
+            task_id,
+            "--database-url",
+            database_url,
+            "--target-state",
+            "PLANNING",
+        ],
+    )
+    authorization_id = _output_value(
+        runner.invoke(
+            app,
+            [
+                "authorizations",
+                "request",
+                task_id,
+                "--database-url",
+                database_url,
+                "--role",
+                "DEVELOPER",
+                "--action",
+                "IMPLEMENT",
+                "--reason",
+                "Need execution authorization",
+                "--requester",
+                "cli-test",
+                "--execution-mode",
+                "SUGGESTED",
+                "--model-id",
+                "local-demo",
+                "--context-scope",
+                "README.md",
+            ],
+        ).output,
+        "authorization_id",
+    )
+    runner.invoke(
+        app,
+        [
+            "authorizations",
+            "decide",
+            authorization_id,
+            "--database-url",
+            database_url,
+            "--status",
+            "GRANTED",
+            "--decided-by",
+            "cli-manager",
+            "--reason",
+            "Approved",
+        ],
+    )
+    execution_id = _output_value(
+        runner.invoke(
+            app,
+            [
+                "executions",
+                "request",
+                "--database-url",
+                database_url,
+                "--task-id",
+                task_id,
+                "--role",
+                "DEVELOPER",
+                "--action",
+                "IMPLEMENT",
+                "--model-id",
+                "local-demo",
+                "--authorization-id",
+                authorization_id,
+                "--project-id",
+                project_id,
+                "--requested-context",
+                "README.md",
+                "--authorized-context",
+                "README.md",
+            ],
+        ).output,
+        "execution_id",
+    )
+
+    cancel_result = runner.invoke(
+        app,
+        ["executions", "cancel", execution_id, "--database-url", database_url],
+    )
+    assert cancel_result.exit_code == 0
+    assert "state=CANCELLED" in cancel_result.output
+
+    already_terminal_result = runner.invoke(
+        app,
+        ["executions", "cancel", execution_id, "--database-url", database_url],
+    )
+    assert already_terminal_result.exit_code == 0
+    assert "state=CANCELLED" in already_terminal_result.output
 
 
 def test_cli_executions_run_drives_execution_engine(tmp_path) -> None:
@@ -1617,14 +1852,14 @@ def test_cli_db_sync_reports_sqlite_shorthand_alias_as_informational_not_error()
 
 
 def test_cli_providers_show_reports_effective_settings(monkeypatch) -> None:
-    monkeypatch.setenv("ORCHAI_AI_PROVIDER", "ollama")
+    monkeypatch.setenv("ORCHAI_AI_PROVIDER", "litellm")
     monkeypatch.setenv("ORCHAI_AI_BASE_URL", "http://localhost:11434")
     runner = CliRunner()
 
     result = runner.invoke(app, ["providers", "show"])
 
     assert result.exit_code == 0
-    assert "provider=ollama" in result.output
+    assert "provider=litellm" in result.output
     assert "base_url=http://localhost:11434" in result.output
 
 
@@ -2258,6 +2493,7 @@ def test_cli_suggestions_show_generate_accept_reject_commands(tmp_path) -> None:
 
 def test_cli_auth_bootstrap_admin_login_logout_flow(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     database_url = f"sqlite:///{tmp_path / 'identity.db'}"
     monkeypatch.setenv("ORCHAI_DATABASE_URL", database_url)
     monkeypatch.setenv("ORCHAI_AUTH_SECRET_KEY", _TEST_SECRET_KEY)
@@ -2318,6 +2554,7 @@ def test_cli_unenforced_by_default_allows_commands_without_login(
 ) -> None:
     monkeypatch.delenv("ORCHAI_AUTH_ENFORCED", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
     runner = CliRunner()
 
@@ -2328,6 +2565,7 @@ def test_cli_unenforced_by_default_allows_commands_without_login(
 
 def test_cli_enforced_requires_authentication(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     identity_database_url = f"sqlite:///{tmp_path / 'identity.db'}"
     monkeypatch.setenv("ORCHAI_DATABASE_URL", identity_database_url)
     monkeypatch.setenv("ORCHAI_AUTH_SECRET_KEY", _TEST_SECRET_KEY)
@@ -2365,6 +2603,7 @@ def test_cli_enforced_rejects_a_user_missing_the_required_permission(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     database_url = f"sqlite:///{tmp_path / 'identity.db'}"
     monkeypatch.setenv("ORCHAI_DATABASE_URL", database_url)
     monkeypatch.setenv("ORCHAI_AUTH_SECRET_KEY", _TEST_SECRET_KEY)
@@ -2409,6 +2648,7 @@ def test_cli_enforced_orchai_token_env_var_is_honored(monkeypatch, tmp_path) -> 
     environment."""
 
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     database_url = f"sqlite:///{tmp_path / 'identity.db'}"
     monkeypatch.setenv("ORCHAI_DATABASE_URL", database_url)
     monkeypatch.setenv("ORCHAI_AUTH_SECRET_KEY", _TEST_SECRET_KEY)
@@ -2461,6 +2701,7 @@ def _permission_id(key: str) -> str:
 
 def test_cli_admin_users_and_access_roles_crud_flow(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     database_url = f"sqlite:///{tmp_path / 'identity.db'}"
     monkeypatch.setenv("ORCHAI_DATABASE_URL", database_url)
     monkeypatch.setenv("ORCHAI_AUTH_SECRET_KEY", _TEST_SECRET_KEY)
@@ -2582,6 +2823,7 @@ def test_cli_admin_users_and_access_roles_crud_flow(monkeypatch, tmp_path) -> No
 
 def test_cli_me_show_update_and_projects(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     database_url = f"sqlite:///{tmp_path / 'identity.db'}"
     monkeypatch.setenv("ORCHAI_DATABASE_URL", database_url)
     monkeypatch.setenv("ORCHAI_AUTH_SECRET_KEY", _TEST_SECRET_KEY)
@@ -2648,6 +2890,7 @@ def test_cli_projects_list_all_requires_admin_manage_projects(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     database_url = f"sqlite:///{tmp_path / 'identity.db'}"
     monkeypatch.setenv("ORCHAI_DATABASE_URL", database_url)
     monkeypatch.setenv("ORCHAI_AUTH_SECRET_KEY", _TEST_SECRET_KEY)

@@ -12,15 +12,22 @@ from orchai.application.authorization import AuthorizationService
 from orchai.application.authorization.ports import AuthorizationRepository
 from orchai.application.context import ContextService
 from orchai.application.context.ports import ContextResolutionRepository
+from orchai.application.conversations import ConversationAIProviderPort, ConversationService
 from orchai.application.events import EventEngine, EventRepository
 from orchai.application.executions import ExecutionService
 from orchai.application.executions.engine import ExecutionEngine
 from orchai.application.executions.ports import AIProviderPort, ExecutionRepository
 from orchai.application.identity import IdentityService
 from orchai.application.metrics import MetricsEventHandler, MetricsRepository
+from orchai.application.modules import get_module as _get_module
 from orchai.application.orchestration.local_flow import LocalFlowDependencies
 from orchai.application.orchestration.orchestrator import Orchestrator
-from orchai.application.policies import AutomaticExecutionPolicy, LocalPolicyService
+from orchai.application.policies import (
+    AutomaticExecutionPolicy,
+    AutomaticPolicyRepository,
+    AutomaticPolicyService,
+    LocalPolicyService,
+)
 from orchai.application.projects import ProjectService
 from orchai.application.projects.ports import (
     ProjectAdapter,
@@ -30,11 +37,7 @@ from orchai.application.projects.ports import (
 from orchai.application.suggestions import SuggestionEngine, SuggestionRepository
 from orchai.application.tasks import TaskService
 from orchai.application.tasks.ports import TaskRepository
-from orchai.infrastructure.ai import (
-    OllamaAIProviderAdapter,
-    OpenAICodexAIProviderAdapter,
-    StubAIProviderAdapter,
-)
+from orchai.infrastructure.ai import LiteLLMProvider, StubAIProviderAdapter
 from orchai.infrastructure.configuration import OrchAISettings, load_settings
 from orchai.infrastructure.identity import (
     Argon2PasswordHasher,
@@ -44,9 +47,12 @@ from orchai.infrastructure.identity import (
 from orchai.infrastructure.persistence import (
     InMemoryAuditRepository,
     InMemoryAuthorizationRepository,
+    InMemoryAutomaticPolicyRepository,
     InMemoryContextResolutionRepository,
+    InMemoryConversationRepository,
     InMemoryEventRepository,
     InMemoryExecutionRepository,
+    InMemoryMessageRepository,
     InMemoryMetricsRepository,
     InMemoryProjectRepository,
     InMemorySuggestionRepository,
@@ -55,10 +61,13 @@ from orchai.infrastructure.persistence import (
     SQLAlchemyAccessRoleRepository,
     SQLAlchemyAuditRepository,
     SQLAlchemyAuthorizationRepository,
+    SQLAlchemyAutomaticPolicyRepository,
     SQLAlchemyContextResolutionRepository,
+    SQLAlchemyConversationRepository,
     SQLAlchemyDatabase,
     SQLAlchemyEventRepository,
     SQLAlchemyExecutionRepository,
+    SQLAlchemyMessageRepository,
     SQLAlchemyMetricsRepository,
     SQLAlchemyPermissionRepository,
     SQLAlchemyProjectRepository,
@@ -93,6 +102,7 @@ PERMISSION_CATALOG: dict[str, str] = {
     "executions:manage": "Manage (start, inspect, control) executions.",
     "suggestions:manage": "Accept, reject, or create suggestions for a task.",
     "policies:evaluate": "Evaluate an automatic execution policy.",
+    "policies:manage": "View and change the persisted automatic execution policy.",
     "admin:manage_users": (
         "Create users and modify user records/access-role assignments. "
         "Superuser-only in practice, modeled as a normal permission so it "
@@ -117,6 +127,8 @@ class OrchAIRuntime:
     execution_service: ExecutionService
     context_service: ContextService
     policy_service: LocalPolicyService
+    automatic_policy_repository: AutomaticPolicyRepository
+    automatic_policy_service: AutomaticPolicyService
     project_adapters: ProjectAdapterRegistry
     event_repository: EventRepository
     audit_repository: AuditRepository
@@ -146,6 +158,7 @@ def build_in_memory_runtime(
         context_resolution_repository=InMemoryContextResolutionRepository(),
         metrics_repository=InMemoryMetricsRepository(),
         suggestion_repository=InMemorySuggestionRepository(),
+        automatic_policy_repository=InMemoryAutomaticPolicyRepository(),
         project_adapters=InMemoryProjectAdapterRegistry(),
         create_project_adapter=_local_filesystem_adapter,
         ai_provider=ai_provider or StubAIProviderAdapter(),
@@ -173,6 +186,7 @@ def build_sqlalchemy_runtime(
         context_resolution_repository=SQLAlchemyContextResolutionRepository(database),
         metrics_repository=SQLAlchemyMetricsRepository(database),
         suggestion_repository=SQLAlchemySuggestionRepository(database),
+        automatic_policy_repository=SQLAlchemyAutomaticPolicyRepository(database),
         project_adapters=InMemoryProjectAdapterRegistry(),
         create_project_adapter=_local_filesystem_adapter,
         ai_provider=ai_provider or StubAIProviderAdapter(),
@@ -239,6 +253,7 @@ def _build_runtime(
     context_resolution_repository: ContextResolutionRepository,
     metrics_repository: MetricsRepository,
     suggestion_repository: SuggestionRepository,
+    automatic_policy_repository: AutomaticPolicyRepository,
     project_adapters: ProjectAdapterRegistry,
     create_project_adapter: ProjectAdapterFactory,
     ai_provider: AIProviderPort,
@@ -284,7 +299,15 @@ def _build_runtime(
         ai_provider=ai_provider,
     )
     suggestion_engine = SuggestionEngine(suggestion_repository)
-    policy_service = LocalPolicyService(automatic_policy=automatic_policy)
+    policy_service = (
+        LocalPolicyService(automatic_policy=automatic_policy)
+        if automatic_policy is not None
+        else LocalPolicyService(automatic_policy_repository=automatic_policy_repository)
+    )
+    automatic_policy_service = AutomaticPolicyService(
+        repository=automatic_policy_repository,
+        event_publisher=event_engine,
+    )
     orchestrator = Orchestrator(
         project_service=project_service,
         task_service=task_service,
@@ -308,6 +331,8 @@ def _build_runtime(
         execution_service=execution_service,
         context_service=context_service,
         policy_service=policy_service,
+        automatic_policy_repository=automatic_policy_repository,
+        automatic_policy_service=automatic_policy_service,
         project_adapters=project_adapters,
         event_repository=event_repository,
         audit_repository=audit_repository,
@@ -418,25 +443,76 @@ def build_identity_runtime_from_settings(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class ConversationRuntime:
+    """Composed conversation runtime (ADR-014).
+
+    Kept separate from `OrchAIRuntime`, the same way `IdentityRuntime`
+    is: `Conversation`/`Message` are their own bounded context, not part
+    of the Task/Execution aggregate family.
+    """
+
+    conversation_service: ConversationService
+    database: SQLAlchemyDatabase
+
+
+def build_sqlalchemy_conversation_runtime(
+    database_url: str,
+    *,
+    ai_provider: ConversationAIProviderPort,
+) -> ConversationRuntime:
+    """Compose the SQLAlchemy-backed conversation runtime."""
+
+    database = SQLAlchemyDatabase(database_url)
+    database.migrate()
+    conversation_service = ConversationService(
+        conversation_repository=SQLAlchemyConversationRepository(database),
+        message_repository=SQLAlchemyMessageRepository(database),
+        ai_provider=ai_provider,
+        get_module=_get_module,
+    )
+    return ConversationRuntime(conversation_service=conversation_service, database=database)
+
+
+def build_in_memory_conversation_runtime(
+    *,
+    ai_provider: ConversationAIProviderPort,
+) -> ConversationService:
+    """Compose a non-durable conversation service for focused tests."""
+
+    return ConversationService(
+        conversation_repository=InMemoryConversationRepository(),
+        message_repository=InMemoryMessageRepository(),
+        ai_provider=ai_provider,
+        get_module=_get_module,
+    )
+
+
+def build_conversation_runtime_from_settings(
+    settings: OrchAISettings | None = None,
+    *,
+    ai_provider: ConversationAIProviderPort | None = None,
+) -> ConversationRuntime:
+    """Compose the conversation runtime from effective settings."""
+
+    effective_settings = settings or load_settings()
+    return build_sqlalchemy_conversation_runtime(
+        effective_settings.database.sqlalchemy_url,
+        ai_provider=ai_provider or provider_from_settings(effective_settings),
+    )
+
+
 def provider_from_settings(settings: OrchAISettings) -> AIProviderPort:
     """Instantiate the configured AI provider adapter."""
 
     provider = settings.ai_provider.provider
     if provider == "stub":
         return StubAIProviderAdapter()
-    if provider == "ollama":
-        return OllamaAIProviderAdapter(
-            base_url=settings.ai_provider.base_url or "http://localhost:11434",
-            timeout_seconds=settings.ai_provider.timeout_seconds,
-        )
-    if provider == "openai":
-        if settings.ai_provider.api_key is None:
-            raise ValueError("ORCHAI_AI_API_KEY is required for the openai provider")
-        return OpenAICodexAIProviderAdapter(
+    if provider == "litellm":
+        return LiteLLMProvider(
+            model=settings.ai_provider.model,
             api_key=settings.ai_provider.api_key,
-            base_url=settings.ai_provider.base_url or "https://api.openai.com/v1",
+            base_url=settings.ai_provider.base_url,
             timeout_seconds=settings.ai_provider.timeout_seconds,
-            organization=settings.ai_provider.organization,
-            project=settings.ai_provider.project,
         )
     raise ValueError(f"unsupported ai provider: {provider}")

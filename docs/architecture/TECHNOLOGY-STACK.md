@@ -42,6 +42,19 @@ provider SDK, or transport implementation.
 
   API Schema                          OpenAPI through FastAPI
 
+  AI Provider Access                  LiteLLM (see ADR-013)
+
+  Streaming Transport                 Server-Sent Events (SSE) (see
+                                      ADR-013)
+
+  Desktop Shell                       `pywebview` on Windows WebView2
+                                      (see ADR-017)
+
+  Desktop Frontend (build-time only)  Vite + React, built to static
+                                      assets; Node.js is never bundled
+                                      or run in the shipped application
+                                      (see ADR-017)
+
   Containerization                    Docker
 
   Logging / Observability             Structured application logging with
@@ -145,6 +158,24 @@ Provider SDKs remain infrastructure dependencies.
 
 Model capabilities are explicit so Actions can express requirements
 without depending on a specific provider or model family.
+
+Per ADR-013, the single Provider Adapter implementation is LiteLLM
+(`infrastructure/ai/litellm_provider.py`), covering OpenAI, Anthropic,
+Gemini, Ollama, and other OpenAI-compatible local runtimes behind one
+calling convention, plus streaming (`AIProviderPort.execute_stream()`)
+and retry/backoff. LiteLLM itself never appears above
+`infrastructure/ai/`; `AIProviderPort` remains the domain-facing
+contract.
+
+## Desktop Client
+
+Per ADR-017, OrchAI Desktop is a `pywebview`-based shell that starts
+the existing FastAPI application in-process (bound to `127.0.0.1`
+only) and renders a frontend built with Vite + React to static assets.
+`pywebview` uses Windows' built-in WebView2 (Edge Chromium) runtime, so
+no browser engine is bundled with the application; Node.js and the
+frontend framework are development-time tooling only, never part of
+the shipped artifact. See `docs/architecture/DESKTOP-APPLICATION.md`.
 
 ## Project Integration
 

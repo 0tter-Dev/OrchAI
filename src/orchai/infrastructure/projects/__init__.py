@@ -3,7 +3,13 @@
 from orchai.infrastructure.projects.local_filesystem import (
     LocalFilesystemProjectAdapter,
 )
+from orchai.infrastructure.projects.media_workspace import (
+    MediaWorkspaceProjectAdapter,
+)
 from orchai.infrastructure.projects.registry import InMemoryProjectAdapterRegistry
 
-__all__ = ["InMemoryProjectAdapterRegistry", "LocalFilesystemProjectAdapter"]
-
+__all__ = [
+    "InMemoryProjectAdapterRegistry",
+    "LocalFilesystemProjectAdapter",
+    "MediaWorkspaceProjectAdapter",
+]

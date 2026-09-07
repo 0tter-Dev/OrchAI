@@ -12,6 +12,9 @@ provide a stable entry point for humans and AI agents.
 
 ### Architectural Foundation
 
+-   [`VISION.md`](VISION.md) --- Product-level narrative: what OrchAI is
+    for, the desktop client, and the general layer / Module structure
+    (Forge, Studio).
 -   [`ARCHITECTURAL-CONTRACT.md`](ARCHITECTURAL-CONTRACT.md) ---
     Architectural invariants and non-negotiable principles.
 -   [`ARCHITECTURE.md`](ARCHITECTURE.md) --- High-level system

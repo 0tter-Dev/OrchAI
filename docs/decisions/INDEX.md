@@ -34,8 +34,24 @@ ADRs explain why important architectural choices were made.
     --- Chat-first `/requests` interface for external clients.
 -   [`ADR-012-AUTHENTICATION-AND-AUTHORIZATION.md`](ADR-012-AUTHENTICATION-AND-AUTHORIZATION.md)
     --- Identity and access control (JWT authentication, persisted
-    users/permissions, superuser) for the CLI and API. Design only;
-    implementation is follow-up work.
+    users/permissions, superuser) for the CLI and API. Accepted ---
+    implemented (v0.1.11).
+-   [`ADR-013-LITELLM-AND-STREAMING-PROVIDER.md`](ADR-013-LITELLM-AND-STREAMING-PROVIDER.md)
+    --- LiteLLM as the AI provider adapter, plus a streaming extension
+    to `AIProviderPort`. Design only; implementation is follow-up work.
+-   [`ADR-014-CONVERSATION-DOMAIN-MODEL.md`](ADR-014-CONVERSATION-DOMAIN-MODEL.md)
+    --- `Conversation`/`Message` as a new bounded context, with
+    explicit-only escalation to a real Task. Design only; implementation
+    is follow-up work.
+-   [`ADR-015-MODULE-CONCEPT.md`](ADR-015-MODULE-CONCEPT.md) --- The
+    `ModuleDefinition` registry (Forge, Studio, and future modules).
+    Design only; implementation is follow-up work.
+-   [`ADR-016-DESKTOP-SINGLE-USER-IDENTITY-SIMPLIFICATION.md`](ADR-016-DESKTOP-SINGLE-USER-IDENTITY-SIMPLIFICATION.md)
+    --- Single local user identity, attribution-only, for OrchAI
+    Desktop. Design only; implementation is follow-up work.
+-   [`ADR-017-DESKTOP-APPLICATION-SHELL.md`](ADR-017-DESKTOP-APPLICATION-SHELL.md)
+    --- `pywebview` desktop shell with an in-process backend. Design
+    only; implementation is follow-up work.
 
 ## ADR Status Model
 
