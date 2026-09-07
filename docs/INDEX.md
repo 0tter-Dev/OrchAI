@@ -36,6 +36,23 @@ provide a stable entry point for humans and AI agents.
 -   [`domains/INDEX.md`](domains/INDEX.md) --- Domain documentation
     navigation.
 
+### Context Documentation (in progress)
+
+`docs/context/` is the target consolidation of `docs/architecture/`
+and `docs/domains/` into one file per bounded concept (see
+`docs/TO-DO.md`'s "Next Implementation Roadmap"). So far:
+
+-   [`context/tasks-and-lifecycle.md`](context/tasks-and-lifecycle.md)
+    --- Task identity, scope, lifecycle, and the state machine.
+-   [`context/execution-engine.md`](context/execution-engine.md) ---
+    Execution construction, results, and the AI Provider Adapter
+    boundary.
+-   [`context/roles-actions-models.md`](context/roles-actions-models.md)
+    --- Roles, Actions, Models, and Capabilities.
+-   [`context/events-and-state.md`](context/events-and-state.md) ---
+    Event contract, dispatch strategy, and the State Machine
+    relationship.
+
 ### Architecture Decisions
 
 -   [`decisions/INDEX.md`](decisions/INDEX.md) --- Architecture Decision
