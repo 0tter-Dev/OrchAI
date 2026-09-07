@@ -586,3 +586,49 @@ default. This is the same decision already stated as Principle 2.6
 `docs/archive/decisions/ADR-009-PROJECT-CONTENT-OWNERSHIP.md`.
 
 ------------------------------------------------------------------------
+
+## 7. Product Vision
+
+OrchAI is a Windows desktop application for working with AI —
+visually and in day-to-day use, comparable to Claude Desktop, ChatGPT,
+or Cursor: a native window, a project/folder picker, persistent
+conversations, and models chosen per conversation from both local and
+cloud providers.
+
+What sets it apart is not the chat surface — it is what sits behind
+it. Every AI-assisted action that touches a real project runs through
+the orchestration core defined by this contract, keeping a human in
+control per Principles 2.1 and 2.2: a proposed change is a suggestion
+until explicitly approved, every execution is authorized and audited,
+and roles/actions/models stay independent and swappable rather than
+hardwired to one provider or one workflow. A casual question in the
+chat is answered like any chat product would; asking OrchAI to
+actually change a project surfaces that difference immediately, as an
+explicit approval step in the conversation itself, not as a separate
+tool the user has to switch to.
+
+OrchAI's general layer provides what every use of the product shares:
+multi-provider chat, conversation and project/folder management, a
+local user profile, and metrics/audit — with plugins, connectors, and
+skills planned as future extensions of this same layer. Modules are
+specialized experiences within that layer — Forge for code, Studio
+for multimedia planning and generation, and an open-ended set of
+future modules; see `docs/context/modules-and-domain-structure.md`
+for the Module concept and how Forge and Studio are currently
+defined, rather than restating that definition here.
+
+OrchAI's orchestration core — Task/Role/Action/Execution/
+Authorization, audit, metrics, project adapters — was built first, as
+an API-first backend. That core turned out to be the right foundation
+for something larger: instead of asking a future, unspecified client
+to consume it, OrchAI becomes the client itself, built as the desktop
+product it was always meant to be reached through, with the
+orchestration core as its engine rather than as its entire product.
+See `docs/context/deployment-and-desktop.md` for how the desktop
+shell is built and phased.
+
+This section folds in `docs/VISION.md`'s product-level narrative, now
+retired as a standalone document; the underlying principles and
+non-goals it illustrates remain sections 2 and 3 above.
+
+------------------------------------------------------------------------

@@ -724,7 +724,7 @@ def test_api_health_endpoint_reports_version() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "0.2.6"}
+    assert response.json() == {"status": "ok", "version": "0.2.7"}
 
 
 def test_api_direct_task_and_execution_lifecycle_endpoints(tmp_path) -> None:

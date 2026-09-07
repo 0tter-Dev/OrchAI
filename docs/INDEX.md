@@ -12,11 +12,11 @@ provide a stable entry point for humans and AI agents.
 
 ### Architectural Foundation
 
--   [`VISION.md`](VISION.md) --- Product-level narrative: what OrchAI is
-    for, the desktop client, and the general layer / Module structure
-    (Forge, Studio).
 -   [`ARCHITECTURAL-CONTRACT.md`](ARCHITECTURAL-CONTRACT.md) ---
-    Architectural invariants and non-negotiable principles.
+    Architectural invariants and non-negotiable principles; §7 carries
+    the product-level narrative (what OrchAI is for, the desktop
+    client, the general layer / Module structure) folded in from the
+    retired `VISION.md`.
 -   [`ARCHITECTURE.md`](ARCHITECTURE.md) --- High-level system
     architecture and relationships.
 -   [`DEVELOPMENT-GUIDE.md`](DEVELOPMENT-GUIDE.md) --- Day-to-day
@@ -84,15 +84,15 @@ section (single-domain) above.
 
 -   [`../AGENTS.md`](../AGENTS.md) --- Rules and constraints for human
     and AI contributors.
--   [`../CONTRIBUTING.md`](../CONTRIBUTING.md) --- Practical branch,
-    validation, and pull request baseline for contributors.
+-   [`GIT-GITHUB-FLOW.md`](GIT-GITHUB-FLOW.md) --- Branch, commit,
+    version, and pull request discipline for contributors, replacing
+    the former `CONTRIBUTING.md` and
+    `docs/engineering/DELIVERY-BASELINE.md`.
 -   [`USER-ONBOARDING.md`](USER-ONBOARDING.md) --- Product-oriented
     onboarding guide for users adopting OrchAI in real projects.
 -   [`USER-OPERATIONS-GUIDE.md`](USER-OPERATIONS-GUIDE.md) --- Detailed
     operational guide for configuration, policies, providers, runtime
     posture, and real-project usage.
--   [`engineering/DELIVERY-BASELINE.md`](engineering/DELIVERY-BASELINE.md)
-    --- Initial Git/GitHub/CI baseline for safe incremental delivery.
 -   [`context/authorization-policy.md`](context/authorization-policy.md)
     --- Detailed explanation of policy, authorization, and execution
     boundaries.
