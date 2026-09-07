@@ -20,7 +20,7 @@ forward.
 
 ## Current Project Stage
 
-OrchAI is currently in the `v0.2.5` implementation stage as of
+OrchAI is currently in the `v0.2.6` implementation stage as of
 `2026-09-07`.
 
 ## Feature Table
@@ -30,6 +30,7 @@ OrchAI is currently in the `v0.2.5` implementation stage as of
 | Architectural Contract | Define the system's non-negotiable invariants and non-goals | implemented | Documentation only; 23 numbered principles in `ARCHITECTURAL-CONTRACT.md` |
 | High-Level Architecture | Describe the system's layers, core concepts, and execution modes | implemented | Documentation only, `ARCHITECTURE.md` |
 | Component Boundaries | Define each logical component's responsibilities | implemented | Documentation only, distributed across `docs/context/*.md` |
+| Development Guide | Day-to-day engineering discipline: architectural rules, code quality, scope control, testing/CI direction | implemented | Documentation only, `DEVELOPMENT-GUIDE.md` |
 | Implementation Map | Map architecture to concrete code modules and ordering | implemented | Documentation only, `IMPLEMENTATION-MAP.md` |
 | Core Domain Model | Task/Role/Action/Model/Context/Execution/Event/Authorization entities | implemented | — |
 | Authorization | MANUAL/SUGGESTED/AUTOMATIC authorization workflow | implemented | — |

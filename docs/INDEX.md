@@ -19,6 +19,10 @@ provide a stable entry point for humans and AI agents.
     Architectural invariants and non-negotiable principles.
 -   [`ARCHITECTURE.md`](ARCHITECTURE.md) --- High-level system
     architecture and relationships.
+-   [`DEVELOPMENT-GUIDE.md`](DEVELOPMENT-GUIDE.md) --- Day-to-day
+    engineering discipline: architectural rules, code quality, scope
+    control, documentation/naming rules, testing and CI/CD direction,
+    and the selected technology baseline.
 -   [`IMPLEMENTATION-MAP.md`](IMPLEMENTATION-MAP.md) --- Roadmap from
     architecture to implementation.
 
