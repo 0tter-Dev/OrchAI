@@ -173,6 +173,40 @@ application services and never own lifecycle rules directly.
 Operational list queries support bounded filtering, e.g. `GET
 /tasks?project_id=<id>&state=PLANNING&limit=20`.
 
+## Conversations
+
+A `Conversation` (with `Message` records) is a second, independent
+bounded context alongside `/requests` — multi-turn and long-lived,
+where most messages are ordinary back-and-forth that never need a
+`Task`/`Authorization`/`Execution` behind them. `Conversation` carries
+`id`, `module_id`, an optional `project_id`, and a title; `Message`
+carries `role` (`USER`/`ASSISTANT`/`SYSTEM`), `content`, `provider_name`,
+an optional `model_id`, and optional `linked_task_id`/
+`linked_execution_id`. A message's lifecycle is a plain enum
+(`PENDING → STREAMING → COMPLETE | FAILED`), not a `StateMachine`-governed
+aggregate like Task or Execution.
+
+**Escalation to a real Task is always explicit, never inferred.** A
+message becomes a `Task` only through a deliberate user action (an
+"Execute as Task" control, or a slash-command like `/plan`,
+`/implement`, `/review` mapping to a known `(role, action)` pair) — at
+that point OrchAI calls the exact same `/requests` machinery described
+above, with no parallel authorization path, and records the resulting
+`task_id`/`execution_id` on the triggering message. There is no
+automatic intent classifier; if automatic classification is ever
+proposed, it must itself surface only as a suggestion (see
+`Observability`), never as direct, silent Task creation.
+
+Non-escalated messages are answered through a separate, narrower
+`ConversationAIProviderPort.complete()`/`complete_stream()` (no
+Task/Role/Action concept at all) rather than the Task-bounded
+`AIProviderPort.execute()` used by `/requests` (see `Execution
+Engine`) — `LiteLLMProvider` implements both ports. Endpoints:
+`POST`/`GET /conversations`, `GET /conversations/{id}`, `POST`/`GET
+/conversations/{id}/messages` (message send may stream, see `Execution
+Engine`'s streaming note); message escalation is `POST
+/conversations/{id}/escalate`.
+
 ## Key Rules
 
 - UI state is never authoritative task state; UI actions never bypass authorization
@@ -182,6 +216,14 @@ Operational list queries support bounded filtering, e.g. `GET
 - `POST /requests/{id}/approve` records an explicit authorization decision; it never bypasses the authorization boundary
 - "pending" is derived from the absence of a decision (`Authorization.status is None`) or `SuggestionStatus.PRESENTED`, never a literal `"PENDING"` string
 - selecting "the most recent" record from a repository `list()` result must use an explicit timestamp comparison, never list position — repositories do not share an ordering guarantee
+- `Conversation`/`Message` persistence is independent of `Task`; a `Message` escalates only through an explicit user action mapping to a known `(role, action)` pair, never inferred intent, and escalation reuses the `/requests` authorization/policy/suggestion path unmodified
+
+This document folds in the still-relevant decisions from the former
+ADR-004 (API-First Interface Boundary — superseded in spirit by the
+chat-first layer above), ADR-011 (Chat-First Request Interface — the
+Request Lifecycle mechanics above), and ADR-014 (Conversation/Message
+domain model — the Conversations section above); full rationale for
+each remains in `docs/archive/decisions/`.
 
 ## Main Relationships
 

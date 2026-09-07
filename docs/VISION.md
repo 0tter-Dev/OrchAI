@@ -69,8 +69,9 @@ engine rather than as its entire product.
   is built and phased.
 - `docs/context/modules-and-domain-structure.md` --- how Forge,
   Studio, and future modules are defined.
-- `docs/decisions/INDEX.md` --- the ADRs recording why each major choice
-  (LiteLLM, conversations, modules, single-user identity, the desktop
-  shell itself) was made.
+- `docs/archive/decisions/INDEX.md` --- the archived ADRs recording why
+  each major choice (LiteLLM, conversations, modules, single-user
+  identity, the desktop shell itself) was made; still-relevant content
+  now lives in `ARCHITECTURAL-CONTRACT.md` and `docs/context/*.md`.
 - `docs/STATUS.md` --- current implementation state.
 - `docs/TO-DO.md` --- current backlog.

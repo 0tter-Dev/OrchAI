@@ -54,7 +54,13 @@ homes across this cluster and the previous one. `v0.2.4` finishes the
 `deployment-and-desktop.md`), removing every remaining file in
 `docs/architecture/` and `docs/domains/` (including `COMPONENTS.md`
 and both directories' own `INDEX.md`) so neither directory exists
-anymore.
+anymore. `v0.2.5` retires the ADR format: all 17 ADRs move verbatim
+into `docs/archive/decisions/`, and their still-relevant decisions
+fold into `ARCHITECTURAL-CONTRACT.md` §6 (4 cross-cutting decisions)
+or the matching `docs/context/*.md` file's Key Rules (13 single-domain
+decisions, including a new Conversations section in
+`chat-first-and-interfaces.md` and a streaming section in
+`execution-engine.md` for content that had no prior home).
 
 The current AI-agent Git identity for automated pull requests is
 `0tter-Dev-AI`.
@@ -68,32 +74,7 @@ broad, split it into sequential steps before implementation starts.
 
 ## Next Implementation Roadmap
 
-1. `docs(decisions): retire the ADR format into docs/archive/decisions`
-
-   Objective: stop using standalone ADRs as the active decision-record
-   mechanism, matching the OrchFlow-inspired model.
-
-   Main scope: move all 17 ADRs plus `docs/decisions/README.md` and
-   `INDEX.md` verbatim into `docs/archive/decisions/`, with a banner
-   marking them historical; fold each ADR's still-relevant decision
-   statement into either `ARCHITECTURAL-CONTRACT.md`'s new "Foundational
-   Decisions" section (cross-cutting decisions) or the matching
-   `docs/context/*.md` file's "Key Rules" section (single-domain
-   decisions), without carrying over the superseded rationale/consequences
-   prose.
-
-   Likely documents to update: `docs/archive/decisions/` (new location
-   for all ADRs), `docs/ARCHITECTURAL-CONTRACT.md`, the affected
-   `docs/context/*.md` files, `docs/INDEX.md`.
-
-   Expected validation: documentation diff review; confirm every one of
-   the 17 ADRs has both an archive copy and exactly one live landing
-   spot for its decision.
-
-   Planned semantic decision: patch bump from `0.2.4` to `0.2.5`, because
-   this changes the documented decision-record process.
-
-2. `docs(architecture): add DEVELOPMENT-GUIDE.md and trim ARCHITECTURE.md/IMPLEMENTATION-MAP.md`
+1. `docs(architecture): add DEVELOPMENT-GUIDE.md and trim ARCHITECTURE.md/IMPLEMENTATION-MAP.md`
 
    Objective: introduce a lean, OrchFlow-style engineering-discipline
    document without losing the deeper reference material OrchAI's larger
@@ -114,7 +95,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.5` to `0.2.6`, because
    this changes documented engineering governance.
 
-3. `docs(architecture): fold VISION.md into ARCHITECTURAL-CONTRACT.md and retire the old delivery baseline`
+2. `docs(architecture): fold VISION.md into ARCHITECTURAL-CONTRACT.md and retire the old delivery baseline`
 
    Objective: remove the two remaining root documents superseded by
    earlier steps.
@@ -137,7 +118,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.6` to `0.2.7`, because
    this retires governance documents still linked from elsewhere.
 
-4. `docs(user-guide): merge the onboarding and operations guides`
+3. `docs(user-guide): merge the onboarding and operations guides`
 
    Objective: replace two overlapping user documents with a walkthrough
    plus a reference, matching the OrchFlow split.
@@ -161,7 +142,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.7` to `0.2.8`, because
    this changes documented user-facing setup guidance.
 
-5. `docs(index): rewrite INDEX.md as the single navigation hub`
+4. `docs(index): rewrite INDEX.md as the single navigation hub`
 
     Objective: give the now-final documentation set one authoritative
     entry point.
@@ -179,7 +160,7 @@ broad, split it into sequential steps before implementation starts.
     Planned semantic decision: no version bump; pure navigation, no
     documented behavior or governance change.
 
-6. `docs(agents): restructure AGENTS.md`
+5. `docs(agents): restructure AGENTS.md`
 
     Objective: align OrchAI's agent rulebook with the finished
     documentation model.
@@ -214,10 +195,6 @@ broad, split it into sequential steps before implementation starts.
   implementation starts
 - evaluate version impact before starting a step and confirm it once the
   diff is complete
-- never drop an ADR's decision content during retirement (item 1): every
-  decision lands in exactly one place, cross-checked against the mapping
-  table in the OrchFlow-inspired refactor plan before its source ADR is
-  archived
 - keep `docs/ARCHITECTURAL-CONTRACT.md`'s 23 numbered principles verbatim
   through every consolidation step; summarize or link to them, never
   restate them with drift

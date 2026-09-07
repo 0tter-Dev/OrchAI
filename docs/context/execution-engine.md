@@ -84,6 +84,32 @@ OrchAI error categories, and capability negotiation follows the same
 `Required Capability → Available Capability → Authorization Policy →
 Allowed Operation` sequence described in `Roles, Actions, And Models`.
 
+The current concrete adapter is `LiteLLMProvider`
+(`infrastructure/ai/litellm_provider.py`), covering OpenAI, Anthropic,
+Gemini, Ollama, and other OpenAI-compatible local runtimes behind one
+calling convention (see `Technology And Test Strategy`); it replaced
+two earlier hand-rolled, single-provider adapters.
+
+`execute_stream()` extends the same port with an `AsyncIterator` of
+`AIProviderStreamChunk` (`delta`, `finished`, `finish_reason`, and
+token counts on the final chunk) for incremental output — additive,
+not a replacement: `execute()` remains what `AUTOMATIC`-mode,
+non-interactive, and CLI callers use when only the final result
+matters, and `Execution`'s state machine still records exactly one
+atomic terminal result regardless of whether it was produced by a
+streamed or non-streamed call. Transport to external clients is
+Server-Sent Events, not a WebSocket, since the flow is strictly
+server-to-client. Cost estimation is skipped for streamed replies
+(`resource_usage.estimated_cost` is always `None`), since computing it
+accurately would require reassembling the full response from every
+chunk first. `execute_stream()` is implemented and unit-tested; the
+non-streaming `AIProviderPort.execute()` path is what `/requests`
+currently drives (see `Chat-First And Interfaces`) — a Task-bounded
+caller for `execute_stream()` is not wired yet, unlike the
+already-wired streaming used by non-escalated conversation messages
+(`ConversationAIProviderPort.complete_stream()`, see `Chat-First And
+Interfaces`'s Conversations section).
+
 ## Key Rules
 
 - every execution belongs to exactly one task
@@ -95,6 +121,13 @@ Allowed Operation` sequence described in `Roles, Actions, And Models`.
 - execution must not silently expand task scope
 - cross-role transitions must respect authorization policy
 - resource usage should be captured whenever technically available
+- long-running execution is asynchronous (`asyncio`), without distributed worker infrastructure, and execution dispatch stays behind an application/infrastructure boundary so a future durable worker or broker can be introduced without changing domain concepts
+
+This document folds in the still-relevant decisions from the former
+ADR-008 (Async In-Process Execution Baseline) and ADR-013 (LiteLLM
+Provider Adapter and Streaming Execution — the AI Provider Adapter
+Boundary section above); full rationale for each remains in
+`docs/archive/decisions/`.
 
 ## Main Relationships
 

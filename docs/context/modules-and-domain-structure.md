@@ -160,7 +160,13 @@ message in that conversation may escalate to.
 that's a signal the Module concept itself needs revisiting, not that
 the exception is acceptable. A new kind of project connection needs a
 new `ProjectAdapter`; new work outside the existing Role/Action
-vocabulary needs its own ADR before the module can use it.
+vocabulary needs its own explicit, user-authorized decision (recorded
+in this document, not a new module's own definition change) before the
+module can use it.
+
+This document folds in the still-relevant decision from the former
+ADR-015 (Module Concept) — the Module concept above; full rationale
+remains in `docs/archive/decisions/`.
 
 ## Key Rules
 

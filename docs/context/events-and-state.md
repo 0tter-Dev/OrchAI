@@ -77,6 +77,10 @@ the State Machine directly, or interpret an event as implicit user
 authorization. Maps to `application/events/` (domain events in
 `domain/events/`).
 
+This document folds in the still-relevant decision from the former
+ADR-003 (Initial Event Dispatch Strategy) — the in-process dispatcher
+described above; full rationale remains in `docs/archive/decisions/`.
+
 ## Key Rules
 
 - events represent facts and are immutable historical records; corrections are new events, never rewrites
