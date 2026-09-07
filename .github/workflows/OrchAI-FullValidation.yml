@@ -1,15 +1,20 @@
-name: CI
+name: OrchAI - Full Validation
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
-      - "codex/**"
-  pull_request:
+  workflow_dispatch:
 
 jobs:
-  quality:
+  backend:
+    name: Backend Quality
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,6 +35,9 @@ jobs:
 
       - name: Lint
         run: uv run ruff check
+
+      - name: Prepare pytest temp directory
+        run: mkdir -p .pytest-tmp
 
       - name: Test
         run: uv run pytest --basetemp=.pytest-tmp/ci-${{ github.run_id }}-${{ github.run_attempt }}

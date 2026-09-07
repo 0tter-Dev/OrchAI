@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 .pytest_cache/
 .pytest-tmp/
+.cache/
 .ruff_cache/
 .mypy_cache/
 .coverage
@@ -21,6 +22,7 @@ venv/
 build/
 dist/
 *.egg-info/
+node_modules/
 
 # Local runtime state
 .orchai/
@@ -33,6 +35,7 @@ dist/
 # Temporary workspace files
 .tmp/
 tmp/
+runtime/
 
 # Editors and OS
 .idea/
