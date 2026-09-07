@@ -1,15 +1,20 @@
-name: OrchAI - Quality
+name: OrchAI - Full Validation
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
-      - "codex/**"
-  pull_request:
+  workflow_dispatch:
 
 jobs:
-  quality:
+  backend:
+    name: Backend Quality
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4

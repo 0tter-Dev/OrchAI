@@ -285,7 +285,7 @@ This section will be tightened once the `docs/context/` consolidation lands: at 
 
 ## Current CI Baseline
 
-The `OrchAI - Quality` workflow runs on pull requests and on pushes to `main`:
+The `OrchAI - Full Validation` workflow (`.github/workflows/OrchAI-FullValidation.yml`) runs a single `Backend Quality` job on pull requests targeting `main`, on pushes to `main`, and on manual dispatch:
 
 - checkout
 - install `uv`
@@ -296,7 +296,9 @@ The `OrchAI - Quality` workflow runs on pull requests and on pushes to `main`:
 - `uv run pytest --basetemp=...`
 - `uv run orchai --help` (CLI smoke check)
 
-There is no frontend gate and no `mypy` gate yet, and no step builds or tests the repository's `Dockerfile`.
+There is no `frontend` job yet: `apps/desktop/frontend/` is not yet committed and has no `lint`/`test` scripts defined. A `frontend` job should be added to this same workflow file once the desktop frontend is committed and gains real lint/test tooling — mirroring how OrchFlow's equivalent workflow validates its backend and frontend as two jobs inside one centralized file, rather than as separate workflow files.
+
+There is no `mypy` gate yet, and no step builds or tests the repository's `Dockerfile`.
 
 ## CI Direction
 
