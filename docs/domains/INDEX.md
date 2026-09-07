@@ -8,21 +8,17 @@ Each domain document defines one bounded conceptual responsibility.
 
 ## Core Workflow Domains
 
--   [`TASKS.md`](TASKS.md) --- Task identity, scope, lifecycle, and
-    state.
--   [`EXECUTION.md`](EXECUTION.md) --- Concrete execution attempts and
-    outcomes.
 -   [`AUTHORIZATION.md`](AUTHORIZATION.md) --- Permission and
     authorization decisions.
--   [`EVENTS.md`](EVENTS.md) --- Domain events and event semantics.
 
-## Agent and Operation Domains
-
--   [`ROLES.md`](ROLES.md) --- Agent responsibilities.
--   [`ACTIONS.md`](ACTIONS.md) --- Operations an execution may perform.
--   [`MODELS.md`](MODELS.md) --- AI execution resources.
--   [`CAPABILITIES.md`](CAPABILITIES.md) --- Technically available
-    capabilities.
+Task identity/lifecycle, execution, roles/actions/models, and events
+have moved to
+[`../context/tasks-and-lifecycle.md`](../context/tasks-and-lifecycle.md),
+[`../context/execution-engine.md`](../context/execution-engine.md),
+[`../context/roles-actions-models.md`](../context/roles-actions-models.md),
+and [`../context/events-and-state.md`](../context/events-and-state.md)
+respectively, as part of the OrchFlow-inspired documentation
+consolidation (see `docs/TO-DO.md`).
 
 ## Context and Project Domains
 
@@ -78,17 +74,14 @@ accepted**.
 
 For a new contributor, the recommended order is:
 
-1.  `TASKS.md`
-2.  `EXECUTION.md`
+1.  `../context/tasks-and-lifecycle.md`
+2.  `../context/execution-engine.md`
 3.  `AUTHORIZATION.md`
-4.  `EVENTS.md`
-5.  `ROLES.md`
-6.  `ACTIONS.md`
-7.  `MODELS.md`
-8.  `CONTEXT.md`
-9.  `PROJECTS.md`
-10. `CAPABILITIES.md`
-11. `AUDIT.md`
-12. `METRICS.md`
-13. `SUGGESTIONS.md`
-14. `CONFIGURATION.md`
+4.  `../context/events-and-state.md`
+5.  `../context/roles-actions-models.md`
+6.  `CONTEXT.md`
+7.  `PROJECTS.md`
+8.  `AUDIT.md`
+9.  `METRICS.md`
+10. `SUGGESTIONS.md`
+11. `CONFIGURATION.md`

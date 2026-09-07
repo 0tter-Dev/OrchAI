@@ -22,8 +22,6 @@ boundaries without becoming implementation code.
     Domain module organization.
 -   [`PERSISTENCE-STRATEGY.md`](PERSISTENCE-STRATEGY.md) --- Persistence
     boundaries and ownership.
--   [`EVENT-STRATEGY.md`](EVENT-STRATEGY.md) --- Event dispatch and
-    future messaging strategy.
 -   [`ADAPTER-CONTRACTS.md`](ADAPTER-CONTRACTS.md) --- AI and Project
     Adapter boundaries.
 -   [`PROJECT-SECURITY-AND-READINESS.md`](PROJECT-SECURITY-AND-READINESS.md)
@@ -47,6 +45,11 @@ boundaries without becoming implementation code.
     and future modules) introduced by ADR-015.
 -   [`DESKTOP-APPLICATION.md`](DESKTOP-APPLICATION.md) --- The OrchAI
     Desktop client shell introduced by ADR-017.
+
+Event dispatch and messaging strategy has moved to
+[`../context/events-and-state.md`](../context/events-and-state.md), as
+part of the OrchFlow-inspired documentation consolidation (see
+`docs/TO-DO.md`).
 
 ## Architectural Flow
 

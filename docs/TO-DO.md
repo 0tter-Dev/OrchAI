@@ -37,7 +37,11 @@ out Identity and Access Management Phases 1 through 4 as a stable
 baseline for authenticated, desktop-capable orchestration. `v0.2.1`
 translates `docs/API-ENDPOINTS-REPORT.md` to English and redesigns
 `docs/STATUS.md` as a pure status snapshot, archiving its prior
-phase-by-phase narrative into a frozen `docs/HISTORY.md`.
+phase-by-phase narrative into a frozen `docs/HISTORY.md`. `v0.2.2`
+begins the `docs/context/` consolidation with the execution-facing
+cluster (`tasks-and-lifecycle.md`, `execution-engine.md`,
+`roles-actions-models.md`, `events-and-state.md`), removing the seven
+domain files and one architecture file they fully supersede.
 
 The current AI-agent Git identity for automated pull requests is
 `0tter-Dev-AI`.
@@ -51,32 +55,7 @@ broad, split it into sequential steps before implementation starts.
 
 ## Next Implementation Roadmap
 
-1. `docs(context): consolidate execution, task, event, and role documentation`
-
-   Objective: begin merging `docs/architecture/` and `docs/domains/`
-   into a single `docs/context/`, starting with the execution-facing
-   cluster.
-
-   Main scope: create `docs/context/tasks-and-lifecycle.md`,
-   `execution-engine.md`, `roles-actions-models.md`, and
-   `events-and-state.md` from `domains/TASKS.md`, `domains/EXECUTION.md`,
-   `domains/ROLES.md`/`ACTIONS.md`/`MODELS.md`/`CAPABILITIES.md`,
-   `domains/EVENTS.md`, `EVENT-STRATEGY.md`, and the matching sections of
-   `architecture/COMPONENTS.md` and `ADAPTER-CONTRACTS.md`, using the
-   shared Purpose/Objective/Current Status/Key Rules/Main Relationships
-   template; delete the superseded source files.
-
-   Likely documents to update: the four new `docs/context/*.md` files,
-   the superseded `docs/architecture/`/`docs/domains/` source files
-   (removed), `docs/INDEX.md`.
-
-   Expected validation: documentation diff review; grep the repository
-   for dangling references to the removed file paths.
-
-   Planned semantic decision: patch bump from `0.2.1` to `0.2.2`, because
-   this restructures documented architecture boundaries.
-
-2. `docs(context): consolidate identity, authorization, and security documentation`
+1. `docs(context): consolidate identity, authorization, and security documentation`
 
    Objective: continue the `docs/context/` consolidation with the
    identity- and security-sensitive cluster.
@@ -103,7 +82,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.2` to `0.2.3`, because
    this restructures documented security-relevant governance.
 
-3. `docs(context): consolidate infrastructure documentation`
+2. `docs(context): consolidate infrastructure documentation`
 
    Objective: finish the `docs/context/` consolidation with the
    remaining infrastructure-facing files.
@@ -130,7 +109,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.3` to `0.2.4`, because
    this completes a documented architecture restructuring.
 
-4. `docs(decisions): retire the ADR format into docs/archive/decisions`
+3. `docs(decisions): retire the ADR format into docs/archive/decisions`
 
    Objective: stop using standalone ADRs as the active decision-record
    mechanism, matching the OrchFlow-inspired model.
@@ -155,7 +134,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.4` to `0.2.5`, because
    this changes the documented decision-record process.
 
-5. `docs(architecture): add DEVELOPMENT-GUIDE.md and trim ARCHITECTURE.md/IMPLEMENTATION-MAP.md`
+4. `docs(architecture): add DEVELOPMENT-GUIDE.md and trim ARCHITECTURE.md/IMPLEMENTATION-MAP.md`
 
    Objective: introduce a lean, OrchFlow-style engineering-discipline
    document without losing the deeper reference material OrchAI's larger
@@ -176,7 +155,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.5` to `0.2.6`, because
    this changes documented engineering governance.
 
-6. `docs(architecture): fold VISION.md into ARCHITECTURAL-CONTRACT.md and retire the old delivery baseline`
+5. `docs(architecture): fold VISION.md into ARCHITECTURAL-CONTRACT.md and retire the old delivery baseline`
 
    Objective: remove the two remaining root documents superseded by
    earlier steps.
@@ -199,7 +178,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.6` to `0.2.7`, because
    this retires governance documents still linked from elsewhere.
 
-7. `docs(user-guide): merge the onboarding and operations guides`
+6. `docs(user-guide): merge the onboarding and operations guides`
 
    Objective: replace two overlapping user documents with a walkthrough
    plus a reference, matching the OrchFlow split.
@@ -223,7 +202,7 @@ broad, split it into sequential steps before implementation starts.
    Planned semantic decision: patch bump from `0.2.7` to `0.2.8`, because
    this changes documented user-facing setup guidance.
 
-8. `docs(index): rewrite INDEX.md as the single navigation hub`
+7. `docs(index): rewrite INDEX.md as the single navigation hub`
 
     Objective: give the now-final documentation set one authoritative
     entry point.
@@ -241,7 +220,7 @@ broad, split it into sequential steps before implementation starts.
     Planned semantic decision: no version bump; pure navigation, no
     documented behavior or governance change.
 
-9. `docs(agents): restructure AGENTS.md`
+8. `docs(agents): restructure AGENTS.md`
 
     Objective: align OrchAI's agent rulebook with the finished
     documentation model.
@@ -276,7 +255,7 @@ broad, split it into sequential steps before implementation starts.
   implementation starts
 - evaluate version impact before starting a step and confirm it once the
   diff is complete
-- never drop an ADR's decision content during retirement (item 4): every
+- never drop an ADR's decision content during retirement (item 3): every
   decision lands in exactly one place, cross-checked against the mapping
   table in the OrchFlow-inspired refactor plan before its source ADR is
   archived
@@ -291,7 +270,7 @@ broad, split it into sequential steps before implementation starts.
   Access Management was an explicit prerequisite the user asked for
   first, not the start of that refactor; see
   `docs/architecture/IDENTITY-AND-ACCESS-MODEL.md` §6 (folding into
-  `docs/context/authorization-policy.md` per item 2 above)
+  `docs/context/authorization-policy.md` per item 1 above)
 - do not add a roadmap item that conflicts with
   `docs/ARCHITECTURAL-CONTRACT.md`'s non-goals without first revisiting
   the contract explicitly
