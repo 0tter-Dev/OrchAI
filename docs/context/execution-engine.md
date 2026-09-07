@@ -78,7 +78,11 @@ Capabilities` — never unrestricted project access. The result an
 adapter returns: `Outcome`, `Provider Metadata`, `Model Metadata`,
 `Output`, `Warnings`, `Errors`, `Resource Usage`, `Artifacts`.
 Provider-specific SDK/HTTP types stay inside infrastructure adapters
-and never leak into domain models.
+and never leak into domain models. Adapters preserve useful failure
+information while mapping provider-specific failures into stable
+OrchAI error categories, and capability negotiation follows the same
+`Required Capability → Available Capability → Authorization Policy →
+Allowed Operation` sequence described in `Roles, Actions, And Models`.
 
 ## Key Rules
 
