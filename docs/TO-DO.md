@@ -83,10 +83,17 @@ then rewritten as the single navigation hub: a Reading Order, a
 one-line purpose per document, and a single "Relationship Overview"
 section describing how the documentation set relates, now that every
 file referenced has its final name and location (no version bump ---
-pure navigation).
+pure navigation). `v0.2.9` restructures `AGENTS.md` to match the
+finished documentation model: a numbered Source-of-Truth order, the
+`docs/context/` authorization-gating rule applied to every file with
+no exemptions, the dedicated Git identity and agent-driven pull
+request delivery sequence, and version-bump-per-PR discipline folded
+into documentation discipline --- completing the OrchFlow-model
+documentation and delivery-flow refactor this document has tracked
+since `v0.1.11`.
 
 The current AI-agent Git identity for automated pull requests is
-`0tter-Dev-AI`.
+`0tter-Dev-AI`, now documented in `AGENTS.md` itself.
 
 Implemented planning items should be removed from this document as work
 progresses so it remains focused on what comes next. Roadmap items
@@ -97,28 +104,13 @@ broad, split it into sequential steps before implementation starts.
 
 ## Next Implementation Roadmap
 
-1. `docs(agents): restructure AGENTS.md`
-
-    Objective: align OrchAI's agent rulebook with the finished
-    documentation model.
-
-    Main scope: add an explicit numbered Source-of-Truth order
-    (`ARCHITECTURAL-CONTRACT.md` -> `DEVELOPMENT-GUIDE.md` ->
-    `INDEX.md` -> `STATUS.md` -> `USER-GUIDE.md`); add the
-    `docs/context/` authorization-gating rule for AI agents, applying to
-    every file with no exemptions; add the dedicated Git identity and
-    agent-driven pull request delivery sequence; fold
-    version-bump-per-PR discipline into the documentation-discipline
-    section; preserve every existing OrchAI-specific safety rule,
-    re-homed rather than rewritten.
-
-    Likely documents to update: `AGENTS.md`.
-
-    Expected validation: documentation diff review; confirm every
-    existing safety rule survives the restructure.
-
-    Planned semantic decision: patch bump from `0.2.8` to `0.2.9`,
-    because this changes documented agent governance.
+No roadmap step is currently planned --- the OrchFlow-model
+documentation and delivery-flow refactor this section tracked is
+complete as of `v0.2.9`. New steps should be added here following the
+same discipline (one coherent pull-request-sized change per numbered
+step, with Objective / Main scope / Likely documents to update /
+Expected validation / Planned semantic decision) before implementation
+starts on whatever comes next.
 
 ## Cross-Cutting Rules
 
