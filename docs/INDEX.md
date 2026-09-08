@@ -88,11 +88,11 @@ section (single-domain) above.
     version, and pull request discipline for contributors, replacing
     the former `CONTRIBUTING.md` and
     `docs/engineering/DELIVERY-BASELINE.md`.
--   [`USER-ONBOARDING.md`](USER-ONBOARDING.md) --- Product-oriented
-    onboarding guide for users adopting OrchAI in real projects.
--   [`USER-OPERATIONS-GUIDE.md`](USER-OPERATIONS-GUIDE.md) --- Detailed
-    operational guide for configuration, policies, providers, runtime
-    posture, and real-project usage.
+-   [`USER-GUIDE.md`](USER-GUIDE.md) --- End-to-end narrative
+    walkthrough for users adopting OrchAI in real projects.
+-   [`OPERATIONS-REFERENCE.md`](OPERATIONS-REFERENCE.md) --- Detailed
+    configuration, policy/readiness, API/CLI, and troubleshooting
+    reference for real-project usage.
 -   [`context/authorization-policy.md`](context/authorization-policy.md)
     --- Detailed explanation of policy, authorization, and execution
     boundaries.
