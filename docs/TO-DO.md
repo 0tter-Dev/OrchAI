@@ -78,7 +78,12 @@ with `docs/USER-GUIDE.md` (end-to-end narrative walkthrough) and
 `docs/OPERATIONS-REFERENCE.md` (configuration/policy/API/CLI/
 troubleshooting reference), deduplicating the config and CLI snippets
 repeated across the old pair and `README.md`, and fixes `README.md`'s
-stale pre-LiteLLM environment-variable example.
+stale pre-LiteLLM environment-variable example. `docs/INDEX.md` is
+then rewritten as the single navigation hub: a Reading Order, a
+one-line purpose per document, and a single "Relationship Overview"
+section describing how the documentation set relates, now that every
+file referenced has its final name and location (no version bump ---
+pure navigation).
 
 The current AI-agent Git identity for automated pull requests is
 `0tter-Dev-AI`.
@@ -92,25 +97,7 @@ broad, split it into sequential steps before implementation starts.
 
 ## Next Implementation Roadmap
 
-1. `docs(index): rewrite INDEX.md as the single navigation hub`
-
-    Objective: give the now-final documentation set one authoritative
-    entry point.
-
-    Main scope: rewrite `docs/INDEX.md` with a reading order, a one-line
-    purpose per document, and a single "Relationship Overview" section
-    describing how documents relate, now that every file referenced has
-    its final name and location.
-
-    Likely documents to update: `docs/INDEX.md`.
-
-    Expected validation: documentation diff review; check every link in
-    the rewritten index for a broken reference.
-
-    Planned semantic decision: no version bump; pure navigation, no
-    documented behavior or governance change.
-
-2. `docs(agents): restructure AGENTS.md`
+1. `docs(agents): restructure AGENTS.md`
 
     Objective: align OrchAI's agent rulebook with the finished
     documentation model.
