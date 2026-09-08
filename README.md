@@ -10,7 +10,7 @@ business logic in the core.
 
 ## Current Status
 
-Version: `v0.2.7`
+Version: `v0.2.8`
 
 The current implementation is an executable foundation, not a complete
 product.
@@ -86,22 +86,25 @@ $env:ORCHAI_DATABASE_URL = "sqlite:///.orchai/orchai.db"
 $env:ORCHAI_DATABASE_URL = "sqlite"
 ```
 
-The runtime now also supports explicit AI provider and API settings:
+The runtime now also supports explicit AI provider and API settings.
+Since the LiteLLM provider migration, one adapter covers every real
+backend — which one runs is selected by `ORCHAI_AI_MODEL`'s
+`"<provider>/<model>"` prefix, not by `ORCHAI_AI_PROVIDER` itself:
 
 ``` powershell
-$env:ORCHAI_AI_PROVIDER = "ollama"
+$env:ORCHAI_AI_PROVIDER = "litellm"
 $env:ORCHAI_AI_BASE_URL = "http://localhost:11434"
-$env:ORCHAI_AI_MODEL = "qwen2.5-coder:latest"
+$env:ORCHAI_AI_MODEL = "ollama/qwen2.5-coder:latest"
 $env:ORCHAI_API_HOST = "127.0.0.1"
 $env:ORCHAI_API_PORT = "8000"
 ```
 
-For OpenAI/Codex-style cloud execution:
+For OpenAI-style cloud execution (via LiteLLM):
 
 ``` powershell
-$env:ORCHAI_AI_PROVIDER = "openai"
+$env:ORCHAI_AI_PROVIDER = "litellm"
 $env:ORCHAI_AI_API_KEY = "your_api_key"
-$env:ORCHAI_AI_MODEL = "gpt-5-codex"
+$env:ORCHAI_AI_MODEL = "openai/gpt-5"
 ```
 
 Authentication is wired in but opt-in (ADR-012, Phase 3): every route and
@@ -150,8 +153,8 @@ GET /providers/health
 
 ## Guides
 
-- [User onboarding guide](docs/USER-ONBOARDING.md)
-- [User operations guide](docs/USER-OPERATIONS-GUIDE.md)
+- [User guide](docs/USER-GUIDE.md)
+- [Operations reference](docs/OPERATIONS-REFERENCE.md)
 - [Git and GitHub delivery flow](docs/GIT-GITHUB-FLOW.md)
 - [Documentation index](docs/INDEX.md)
 

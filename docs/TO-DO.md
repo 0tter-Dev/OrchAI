@@ -72,7 +72,13 @@ sections it now owns, pointing to it and to the relevant
 §7 (deduplicated against `docs/context/modules-and-domain-structure.md`'s
 Forge/Studio definitions) and deletes `docs/VISION.md`,
 `CONTRIBUTING.md`, and `docs/engineering/DELIVERY-BASELINE.md`, both
-already fully superseded by `docs/GIT-GITHUB-FLOW.md`.
+already fully superseded by `docs/GIT-GITHUB-FLOW.md`. `v0.2.8`
+replaces `docs/USER-ONBOARDING.md` and `docs/USER-OPERATIONS-GUIDE.md`
+with `docs/USER-GUIDE.md` (end-to-end narrative walkthrough) and
+`docs/OPERATIONS-REFERENCE.md` (configuration/policy/API/CLI/
+troubleshooting reference), deduplicating the config and CLI snippets
+repeated across the old pair and `README.md`, and fixes `README.md`'s
+stale pre-LiteLLM environment-variable example.
 
 The current AI-agent Git identity for automated pull requests is
 `0tter-Dev-AI`.
@@ -86,31 +92,7 @@ broad, split it into sequential steps before implementation starts.
 
 ## Next Implementation Roadmap
 
-1. `docs(user-guide): merge the onboarding and operations guides`
-
-   Objective: replace two overlapping user documents with a walkthrough
-   plus a reference, matching the OrchFlow split.
-
-   Main scope: create `docs/USER-GUIDE.md` (end-to-end narrative
-   walkthrough) and `docs/OPERATIONS-REFERENCE.md`
-   (configuration/policy/troubleshooting reference) from
-   `docs/USER-ONBOARDING.md` and `docs/USER-OPERATIONS-GUIDE.md`,
-   deduplicating the config/CLI snippets currently repeated across both
-   plus `README.md`; fix `README.md`'s stale pre-LiteLLM
-   environment-variable example in the same change.
-
-   Likely documents to update: `docs/USER-GUIDE.md` (new),
-   `docs/OPERATIONS-REFERENCE.md` (new), `docs/USER-ONBOARDING.md`
-   (removed), `docs/USER-OPERATIONS-GUIDE.md` (removed), `README.md`,
-   `docs/INDEX.md`.
-
-   Expected validation: documentation diff review; confirm the corrected
-   environment-variable example matches the current LiteLLM adapter.
-
-   Planned semantic decision: patch bump from `0.2.7` to `0.2.8`, because
-   this changes documented user-facing setup guidance.
-
-2. `docs(index): rewrite INDEX.md as the single navigation hub`
+1. `docs(index): rewrite INDEX.md as the single navigation hub`
 
     Objective: give the now-final documentation set one authoritative
     entry point.
@@ -128,7 +110,7 @@ broad, split it into sequential steps before implementation starts.
     Planned semantic decision: no version bump; pure navigation, no
     documented behavior or governance change.
 
-3. `docs(agents): restructure AGENTS.md`
+2. `docs(agents): restructure AGENTS.md`
 
     Objective: align OrchAI's agent rulebook with the finished
     documentation model.
