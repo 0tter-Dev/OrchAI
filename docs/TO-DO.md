@@ -104,13 +104,115 @@ broad, split it into sequential steps before implementation starts.
 
 ## Next Implementation Roadmap
 
-No roadmap step is currently planned --- the OrchFlow-model
-documentation and delivery-flow refactor this section tracked is
-complete as of `v0.2.9`. New steps should be added here following the
-same discipline (one coherent pull-request-sized change per numbered
-step, with Objective / Main scope / Likely documents to update /
-Expected validation / Planned semantic decision) before implementation
-starts on whatever comes next.
+The OrchFlow-model documentation and delivery-flow refactor this
+section tracked is complete as of `v0.2.9`. The next planned
+workstream wires `execute_stream()` (implemented and unit-tested,
+per `docs/context/execution-engine.md`, but with no Task-bounded
+caller yet) into the Task-bounded execution path, so an escalated
+message's real Task execution can stream incrementally the same way
+non-escalated conversation messages already do via
+`ConversationAIProviderPort.complete_stream()`. It is split into three
+sequential steps because it spans the application engine, the API
+transport, and the Desktop frontend, and no single pull request can
+safely cover all three.
+
+The Studio module and the multi-user/per-user authorization revisit
+are explicitly deferred and not part of this workstream --- see the
+Cross-Cutting Rules below for the latter's prerequisite.
+
+1. `feat(execution): stream execute_stream() through ExecutionEngine into one atomic terminal result`
+
+   Objective: give `ExecutionEngine` a streaming execution path without
+   weakening the rule that an `Execution` always records exactly one
+   atomic terminal result, streamed or not.
+
+   Main scope: add a streaming counterpart to
+   `ExecutionEngine.run()` (e.g. `run_stream()`) that calls
+   `AIProviderPort.execute_stream()`, yields `AIProviderStreamChunk`s
+   to its caller, and reassembles the accumulated deltas into the same
+   `AIProviderExecutionResult` shape `run()` already produces, so the
+   existing completion/event/audit recording path needs no branching
+   by streamed-vs-not. Purely additive: `run()` and non-streaming
+   callers are unaffected, and cost estimation stays `None` for
+   streamed results per the already-documented tradeoff. No public
+   API or CLI surface changes yet --- this step is internal to the
+   application layer, exercised only by tests until step 2.
+
+   Likely documents to update:
+   `src/orchai/application/executions/engine.py`,
+   `docs/context/execution-engine.md` (remove the "not wired yet"
+   caveat once this step lands; requires the requesting user's
+   explicit authorization to touch this file per `AGENTS.md`'s
+   `docs/context/` gate).
+
+   Expected validation: unit tests with a fake streaming provider
+   covering partial-chunk accumulation, a failure mid-stream, and
+   confirmation that exactly one terminal `Execution` state is
+   recorded; existing non-streaming tests remain green.
+
+   Planned semantic decision: patch bump from `0.2.9` to `0.2.10`, a
+   narrow, non-public-facing engine capability addition.
+
+2. `feat(api): expose Task-bounded execution streaming via SSE`
+
+   Objective: let an external client receive incremental output for a
+   real, authorized Task execution, mirroring the conversation
+   streaming transport already in place.
+
+   Main scope: add a streaming variant of the execution-run step
+   reachable from `/requests`'s advance flow (or a dedicated
+   `executions` endpoint, decided during implementation against
+   `docs/context/chat-first-and-interfaces.md`'s Request Lifecycle),
+   returning `StreamingResponse(..., media_type="text/event-stream")`
+   the same way `POST /conversations/{id}/messages` already does; add
+   the matching CLI behavior or an explicit, documented decision to
+   leave the CLI on the non-streaming path (the CLI's one-shot process
+   model already forces a synchronous fallback for async execution
+   dispatch, per `docs/OPERATIONS-REFERENCE.md`).
+
+   Likely documents to update: `src/orchai/interfaces/api/main.py`,
+   `src/orchai/interfaces/cli/main.py` (or an explicit note that it is
+   intentionally unchanged), `docs/context/chat-first-and-interfaces.md`
+   and `docs/context/execution-engine.md` (both require explicit
+   per-file authorization), `docs/API-ENDPOINTS-REPORT.md`,
+   `docs/OPERATIONS-REFERENCE.md`'s API Reference section.
+
+   Expected validation: an integration test driving a full
+   `/requests` → advance → stream flow with a fake streaming provider,
+   confirming the SSE event shape matches the conversation-streaming
+   precedent and that the recorded `Execution`/audit/event trail is
+   identical to the non-streaming path.
+
+   Planned semantic decision: minor bump from `0.2.10` to `0.3.0` --- a
+   new public streaming contract for the primary orchestration flow is
+   a meaningful capability increase, not a narrow fix.
+
+3. `feat(desktop): consume Task execution streaming in the Approval Card`
+
+   Objective: make the now-public streaming contract visible where
+   users actually experience Task execution --- the Desktop chat
+   transcript and Approval Card.
+
+   Main scope: extend `apps/desktop/frontend/src/hooks/useConversationChat.js`
+   (or a sibling hook) and `apps/desktop/frontend/src/screens/ApprovalCard.jsx`
+   to render an escalated message's Task execution incrementally,
+   reusing the same streaming-placeholder-then-replace pattern already
+   used for non-escalated conversation streaming, instead of waiting
+   for the final result.
+
+   Likely documents to update:
+   `apps/desktop/frontend/src/hooks/useConversationChat.js`,
+   `apps/desktop/frontend/src/screens/ApprovalCard.jsx`,
+   `docs/context/deployment-and-desktop.md` (requires explicit
+   per-file authorization).
+
+   Expected validation: manual verification in the running Desktop
+   shell (escalate a message, confirm incremental rendering through to
+   the Approval Card's final state); existing conversation-streaming
+   behavior unaffected.
+
+   Planned semantic decision: patch bump from `0.3.0` to `0.3.1` --- UI
+   consumption of an already-shipped public contract, not a new one.
 
 ## Cross-Cutting Rules
 
