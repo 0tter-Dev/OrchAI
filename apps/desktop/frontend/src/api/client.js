@@ -51,6 +51,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ reason, context_paths: contextPaths }),
     }),
+  approveRequestStream: (taskId, contextPaths = [], reason = "Approved from OrchAI Desktop", handlers) =>
+    streamApproveRequest(taskId, contextPaths, reason, handlers),
   rejectSuggestion: (suggestionId) =>
     request(`/suggestions/${suggestionId}/reject`, { method: "POST" }),
   listAttachments: (projectId) => request(`/projects/${projectId}/attachments`),
@@ -71,17 +73,13 @@ export const api = {
 };
 
 // POST-based Server-Sent Events (ADR-013, Phase 4): the browser's built-in
-// EventSource only supports GET, so a streamed chat reply is consumed by
+// EventSource only supports GET, so a streamed reply is consumed by
 // reading the response body ourselves and splitting it on the SSE
-// "\n\n" event separator. Each event is one `data: <json>\n\n` line, with
-// `type` discriminating "user_message" | "delta" | "done" | "error"
-// (see interfaces/api/main.py::_serialize_stream_event).
-async function streamMessage(conversationId, content, model, { onUserMessage, onDelta, onDone, onError } = {}) {
-  const response = await fetch(`/conversations/${conversationId}/messages`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, model }),
-  });
+// "\n\n" event separator. Each event is one `data: <json>\n\n` line.
+// Shared by streamMessage() (conversation replies) and
+// streamApproveRequest() (Task execution streamed through the chat-first
+// approve-stream endpoint) below.
+async function consumeSSE(response, onPayload) {
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     throw new Error(`${response.status} ${response.statusText}: ${text}`);
@@ -102,12 +100,39 @@ async function streamMessage(conversationId, content, model, { onUserMessage, on
       buffer = buffer.slice(separatorIndex + 2);
       const dataLine = rawEvent.split("\n").find((line) => line.startsWith("data:"));
       if (!dataLine) continue;
-
-      const payload = JSON.parse(dataLine.slice("data:".length).trim());
-      if (payload.type === "user_message") onUserMessage?.(payload.message);
-      else if (payload.type === "delta") onDelta?.(payload.content);
-      else if (payload.type === "done") onDone?.(payload.message);
-      else if (payload.type === "error") onError?.(payload.error, payload.message);
+      onPayload(JSON.parse(dataLine.slice("data:".length).trim()));
     }
   }
+}
+
+// `type` discriminates "user_message" | "delta" | "done" | "error"
+// (see interfaces/api/main.py::_serialize_stream_event).
+async function streamMessage(conversationId, content, model, { onUserMessage, onDelta, onDone, onError } = {}) {
+  const response = await fetch(`/conversations/${conversationId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content, model }),
+  });
+  await consumeSSE(response, (payload) => {
+    if (payload.type === "user_message") onUserMessage?.(payload.message);
+    else if (payload.type === "delta") onDelta?.(payload.content);
+    else if (payload.type === "done") onDone?.(payload.message);
+    else if (payload.type === "error") onError?.(payload.error, payload.message);
+  });
+}
+
+// `type` discriminates "delta" | "done"; the "done" payload is the same
+// shape POST /requests/{id}/approve already returns (approved,
+// blocked_reason, task_state, suggestion fields, flow_url, ...) -- see
+// interfaces/api/main.py::_serialize_orchestration_stream_event.
+async function streamApproveRequest(taskId, contextPaths, reason, { onDelta, onDone } = {}) {
+  const response = await fetch(`/requests/${taskId}/approve-stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason, context_paths: contextPaths }),
+  });
+  await consumeSSE(response, (payload) => {
+    if (payload.type === "delta") onDelta?.(payload.content);
+    else if (payload.type === "done") onDone?.(payload);
+  });
 }

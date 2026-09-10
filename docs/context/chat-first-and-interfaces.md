@@ -127,6 +127,19 @@ to the user and waits for explicit approval via
 authorization decision and does not bypass OrchAI's authorization
 machinery — it is equivalent to
 `POST /authorizations/{id}/decision` with `status=GRANTED`.
+`POST /requests/{request_id}/approve-stream` is its streaming
+counterpart (SSE): identical decision logic, but when approval leads
+to an AI-driven stage's execution (the common case — a standalone
+pending Authorization with nothing left to run yet still resolves
+immediately, same as the non-streaming endpoint), the provider's
+output streams incrementally as `type: "delta"` events before a final
+`type: "done"` event carrying the same payload shape the non-streaming
+endpoint returns. This is what the Desktop Approval Card calls (see
+`Deployment And Desktop`'s Screens section); it shares
+`run_task_workflow_stage()`'s exact gating/authorization logic with
+`/approve`, just as `/executions/{id}/run-stream` shares
+`ExecutionEngine.run()`'s (see `Execution Engine`'s streaming note) —
+no separate authorization path for either.
 
 For multi-stage tasks, the client sends one
 `POST /requests/{request_id}/advance` per stage, mapping to the
@@ -200,12 +213,15 @@ proposed, it must itself surface only as a suggestion (see
 Non-escalated messages are answered through a separate, narrower
 `ConversationAIProviderPort.complete()`/`complete_stream()` (no
 Task/Role/Action concept at all) rather than the Task-bounded
-`AIProviderPort.execute()` used by `/requests` (see `Execution
-Engine`) — `LiteLLMProvider` implements both ports. Endpoints:
-`POST`/`GET /conversations`, `GET /conversations/{id}`, `POST`/`GET
-/conversations/{id}/messages` (message send may stream, see `Execution
-Engine`'s streaming note); message escalation is `POST
-/conversations/{id}/escalate`.
+`AIProviderPort.execute()`/`execute_stream()` used by `/requests` (see
+`Execution Engine`) — `LiteLLMProvider` implements both ports.
+Endpoints: `POST`/`GET /conversations`, `GET /conversations/{id}`,
+`POST`/`GET /conversations/{id}/messages` (message send may stream,
+see `Execution Engine`'s streaming note); message escalation is `POST
+/conversations/{id}/escalate`, always followed by an approval (see
+Approval And Advancing above) rather than a direct `/advance` call —
+this is why only `/approve` gained a streaming (`/approve-stream`)
+counterpart, not `/advance`.
 
 ## Key Rules
 

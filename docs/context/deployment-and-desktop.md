@@ -99,7 +99,18 @@ has a pending Authorization, with Approve/Reject actions and a link to
 the full orchestration trace). The Approval Card is the visible
 surface of Human Authority and Suggested-by-Default
 (`ARCHITECTURAL-CONTRACT.md` §2.1/§2.2) and must never be visually
-demoted to look optional or skippable.
+demoted to look optional or skippable. Approving a card whose stage
+runs the AI provider (the common case) calls
+`POST /requests/{id}/approve-stream` instead of the non-streaming
+`.../approve`, rendering the provider's output incrementally in a live
+panel while the stage runs, then refreshing the card from
+`GET /requests/{id}/flow` once the stream ends — the same
+streaming-placeholder-then-replace pattern the conversation transcript
+already uses, reusing `execute_stream()`'s Task-bounded caller chain
+(see `Execution Engine`'s streaming note). Rejecting, and approving a
+card whose stage does not run the AI provider (e.g. a standalone
+pending Authorization with nothing left to run yet), stay on the
+non-streaming path — there is nothing to stream in either case.
 
 ### Implementation History
 

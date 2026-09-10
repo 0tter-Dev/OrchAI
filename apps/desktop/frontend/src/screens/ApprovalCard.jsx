@@ -12,6 +12,10 @@ export default function ApprovalCard({ taskId, contextPaths, content }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState(false);
+  // Live AI provider output while an approved stage is streaming
+  // (Phase 4/ADR-013 follow-up); null when not currently streaming, ""
+  // once streaming starts but before the first delta arrives.
+  const [streamingOutput, setStreamingOutput] = useState(null);
 
   useEffect(() => {
     refresh();
@@ -29,13 +33,19 @@ export default function ApprovalCard({ taskId, contextPaths, content }) {
   async function handleApprove() {
     setBusy(true);
     setError(null);
+    setStreamingOutput("");
     try {
-      await api.approveRequest(taskId, contextPaths);
+      await api.approveRequestStream(taskId, contextPaths, "Approved from OrchAI Desktop", {
+        onDelta: (delta) => {
+          if (delta) setStreamingOutput((current) => (current ?? "") + delta);
+        },
+      });
       await refresh();
     } catch (err) {
       setError(String(err.message || err));
     } finally {
       setBusy(false);
+      setStreamingOutput(null);
     }
   }
 
@@ -95,6 +105,10 @@ export default function ApprovalCard({ taskId, contextPaths, content }) {
                 ? "Aguardando a próxima sugestão…"
                 : `Fluxo: ${flow.status}`}
             </div>
+          )}
+
+          {streamingOutput !== null && (
+            <pre className="approval-card-stream">{streamingOutput || "Executando…"}</pre>
           )}
 
           <button

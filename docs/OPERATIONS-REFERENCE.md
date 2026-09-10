@@ -255,7 +255,15 @@ execution to already be `AUTHORIZED` (`404`/`409` otherwise) and
 returns a `text/event-stream` response — one `type: "delta"` event per
 provider chunk, then a final `type: "done"` event carrying the fully
 serialized terminal execution, mirroring
-`POST /conversations/{id}/messages`'s streaming shape.
+`POST /conversations/{id}/messages`'s streaming shape. On the
+chat-first surface, `POST /requests/{request_id}/approve-stream` is
+the streaming counterpart of `POST /requests/{request_id}/approve`:
+same decision logic (grant a pending authorization directly, or
+delegate to the gated advance mechanism), but an AI-driven stage's
+execution streams the same `delta`/`done` shape, with the `done`
+payload matching what the non-streaming endpoint already returns. This
+is what the OrchAI Desktop Approval Card calls when the user approves
+an escalated message's Task.
 
 ## CLI Reference
 

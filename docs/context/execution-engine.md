@@ -109,26 +109,41 @@ chunk first. `execute_stream()` is implemented and unit-tested, and
 accumulated deltas and token counts into the same
 `AIProviderExecutionResult` shape `ExecutionEngine.run()` produces, so
 completion/event/audit recording needs no branching by
-streamed-vs-not. `run_stream()` is now externally reachable through
-`POST /executions/{execution_id}/run-stream` (SSE) — a dedicated
-fine-grained operational endpoint alongside the existing non-streaming
-`POST /executions/{execution_id}/run`, not a change to `/requests`'s
-own advance flow (see `Chat-First And Interfaces`'s Request Lifecycle:
-`/requests/{id}/advance` still drives the multi-stage orchestrator
-through the non-streaming `execute()`/`run()` path end to end). Each
-SSE chunk event carries `type: "delta"`; once the stream ends, a final
-`type: "done"` event carries the fully serialized terminal `Execution`
-(state, result, resource usage), the same delta-then-done shape used
-by conversation streaming. The one-shot CLI process has no persistent
-connection to stream over, so `orchai executions run` intentionally
-stays on the non-streaming path — mirroring how conversation streaming
-has no CLI command either. The Desktop Approval Card consuming this
-endpoint is tracked as the next step in `docs/TO-DO.md`. This is now
+streamed-vs-not. `run_stream()` now has two external callers. First, a
+dedicated fine-grained operational endpoint alongside the existing
+non-streaming `POST /executions/{execution_id}/run`:
+`POST /executions/{execution_id}/run-stream` (SSE), for a caller that
+already has an `AUTHORIZED` execution id in hand. Second, the
+orchestrator's `Orchestrator.run_task_workflow_stage_stream()` — the
+streaming counterpart of `run_task_workflow_stage()`, sharing its
+exact setup/gating/finalization logic (`_prepare_workflow_stage()`,
+`_finalize_ai_stage_result()`) and differing only in calling
+`run_stream()` instead of `run()` for an AI-driven stage — reachable
+through `POST /requests/{request_id}/approve-stream` (see `Chat-First
+And Interfaces`'s Request Lifecycle). `POST /requests/{id}/advance`
+itself is unchanged and stays on the non-streaming
+`execute()`/`run()` path end to end; only `/approve`'s sibling
+streaming endpoint exists, since that is what the Desktop Approval
+Card actually calls (escalation always resolves to an approval, never
+a direct `/advance` call, per `Chat-First And Interfaces`'s
+Conversations section). Each SSE chunk event carries `type: "delta"`;
+once the stream ends, a final `type: "done"` event carries the
+terminal result — the fully serialized `Execution` for
+`/executions/{id}/run-stream`, or the same flattened
+`TaskWorkflowStageResult` shape `/requests/{id}/approve` already
+returns for `/approve-stream` — the same delta-then-done shape used by
+conversation streaming either way. The one-shot CLI process has no
+persistent connection to stream over, so neither `orchai executions
+run` nor the chat-first CLI commands gained a streaming counterpart —
+mirroring how conversation streaming also has no CLI command. This is
 the same externally-reachable shape as the streaming already used by
 non-escalated conversation messages
 (`ConversationAIProviderPort.complete_stream()`, see `Chat-First And
-Interfaces`'s Conversations section) — both are SSE-reachable, just
-through different endpoints for their different bounded contexts.
+Interfaces`'s Conversations section) — all SSE-reachable, just through
+different endpoints for their different bounded contexts. This
+completes the Task-bounded execution streaming workstream
+`docs/TO-DO.md` tracked across three sequential steps (engine, API,
+Desktop).
 
 ## Key Rules
 

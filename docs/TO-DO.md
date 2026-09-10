@@ -105,33 +105,44 @@ broad, split it into sequential steps before implementation starts.
 ## Next Implementation Roadmap
 
 The OrchFlow-model documentation and delivery-flow refactor this
-section tracked is complete as of `v0.2.9`. The next planned
-workstream wires `execute_stream()` into the Task-bounded execution
-path, so an escalated message's real Task execution can stream
-incrementally the same way non-escalated conversation messages already
-do via `ConversationAIProviderPort.complete_stream()`. It is split
-into three sequential steps because it spans the application engine,
-the API transport, and the Desktop frontend, and no single pull
-request can safely cover all three. `v0.2.10` completed the first of
-those three steps: `ExecutionEngine.run_stream()` calls
-`AIProviderPort.execute_stream()` and reassembles the accumulated
-chunks into the same atomic terminal `AIProviderExecutionResult`
-`run()` already produces. `v0.3.0` completed the second step:
-`POST /executions/{execution_id}/run-stream` exposes `run_stream()`
-over SSE as a dedicated fine-grained operational endpoint alongside
-the existing non-streaming `POST /executions/{execution_id}/run` ---
-deliberately not threaded through `/requests`'s own multi-stage
-advance flow, since that orchestrator flow was not itself restructured
-to stream (see `docs/context/execution-engine.md`); the CLI stays on
-the non-streaming path, mirroring how conversation streaming also has
-no CLI command. Only the Desktop Approval Card consumption (below)
-remains.
+section tracked is complete as of `v0.2.9`. The workstream that wired
+`execute_stream()` into the Task-bounded execution path -- so an
+escalated message's real Task execution streams incrementally the same
+way non-escalated conversation messages already do via
+`ConversationAIProviderPort.complete_stream()` -- is now complete as
+of `v0.4.0`, across three sequential pull requests: `v0.2.10` added
+`ExecutionEngine.run_stream()` (drives `AIProviderPort.execute_stream()`,
+reassembles chunks into the same atomic terminal
+`AIProviderExecutionResult` `run()` produces); `v0.3.0` exposed it over
+SSE as a dedicated fine-grained operational endpoint,
+`POST /executions/{execution_id}/run-stream`, alongside the existing
+non-streaming `POST /executions/{execution_id}/run`; `v0.4.0` made the
+Desktop Approval Card actually consume streaming output. That last
+step could not simply call the fine-grained endpoint as originally
+planned, though: `POST /requests/{id}/approve` (what the Approval Card
+actually calls) creates and runs an execution atomically in one
+synchronous call inside `run_task_workflow_stage()`, so no
+`AUTHORIZED`-but-not-yet-run execution id is ever exposed to the
+client for it to stream separately. Resolving that (per the user's
+explicit direction, choosing this over splitting `/approve` into two
+round trips or dropping real streaming from the Approval Card) required
+extending the orchestrator itself: `run_task_workflow_stage()` was
+refactored into shared setup/finalization helpers
+(`_prepare_workflow_stage()`, `_finalize_ai_stage_result()`,
+`_finalize_test_stage_result()`) plus a new streaming counterpart,
+`Orchestrator.run_task_workflow_stage_stream()`, reachable through a
+new public chat-first endpoint, `POST /requests/{request_id}/approve-stream`
+(SSE) -- see `docs/context/execution-engine.md` and
+`docs/context/chat-first-and-interfaces.md` for the full shape.
+`POST /requests/{id}/advance` itself is unchanged and stays
+non-streaming; only `/approve` gained a streaming sibling, since that
+is what escalation always resolves to.
 
 The Studio module and the multi-user/per-user authorization revisit
 are explicitly deferred and not part of this workstream --- see the
 Cross-Cutting Rules below for the latter's prerequisite.
 
-A second, independent workstream (steps 2-4) closes a gap in OrchAI's
+The remaining workstream below (steps 1-3) closes a gap in OrchAI's
 own usability: the project already models a generic "lifecycle
 script" concept for the projects *it* orchestrates
 (`docs/context/project-adapter-and-security.md`'s readiness gates,
@@ -149,39 +160,12 @@ future step here should re-read its current files rather than assume
 the shape described below stays fixed. A Desktop UX revalidation pass
 against the Codex/Claude Code
 comparison in `docs/ARCHITECTURAL-CONTRACT.md` §7 is intentionally left
-as a future mention only (not a numbered step yet) until steps 2-4
+as a future mention only (not a numbered step yet) until steps 1-3
 land --- manual UI/UX testing is expected to be materially easier once
 a single `orchai.bat` can start/stop/restart the Desktop shell on
 demand.
 
-1. `feat(desktop): consume Task execution streaming in the Approval Card`
-
-   Objective: make the now-public streaming contract visible where
-   users actually experience Task execution --- the Desktop chat
-   transcript and Approval Card.
-
-   Main scope: extend `apps/desktop/frontend/src/hooks/useConversationChat.js`
-   (or a sibling hook) and `apps/desktop/frontend/src/screens/ApprovalCard.jsx`
-   to render an escalated message's Task execution incrementally,
-   reusing the same streaming-placeholder-then-replace pattern already
-   used for non-escalated conversation streaming, instead of waiting
-   for the final result.
-
-   Likely documents to update:
-   `apps/desktop/frontend/src/hooks/useConversationChat.js`,
-   `apps/desktop/frontend/src/screens/ApprovalCard.jsx`,
-   `docs/context/deployment-and-desktop.md` (requires explicit
-   per-file authorization).
-
-   Expected validation: manual verification in the running Desktop
-   shell (escalate a message, confirm incremental rendering through to
-   the Approval Card's final state); existing conversation-streaming
-   behavior unaffected.
-
-   Planned semantic decision: patch bump from `0.3.0` to `0.3.1` --- UI
-   consumption of an already-shipped public contract, not a new one.
-
-2. `feat(bootstrap): add tools/windows/orchai-setup.bat for environment and dependency checks`
+1. `feat(bootstrap): add tools/windows/orchai-setup.bat for environment and dependency checks`
 
    Objective: give OrchAI a first-run entrypoint that verifies
    prerequisites and prepares the local environment for itself, the
@@ -189,8 +173,8 @@ demand.
 
    Main scope: add `tools/windows/orchai-setup.bat`, adapted from
    OrchFlow's `tools/windows/orchflow-setup.bat`, with a non-
-   interactive `check` argument (reusable by step 3's root launcher
-   and step 4's bootstrap executable) plus an interactive first-run
+   interactive `check` argument (reusable by step 2's root launcher
+   and step 3's bootstrap executable) plus an interactive first-run
    menu; verify Python 3.14 and `uv` are on `PATH`, confirm `.env`
    exists (copying from the already-committed `.env.example` when
    missing --- no new template needed), run `uv sync`, run
@@ -211,11 +195,11 @@ demand.
    deliberately-missing-prerequisite case; `uv run ruff check` and
    `uv run pytest` unaffected (no Python source changes).
 
-   Planned semantic decision: patch bump from `0.3.1` to `0.3.2` --- a
+   Planned semantic decision: patch bump from `0.4.0` to `0.4.1` --- a
    contained setup-tooling addition, no public contract or documented
    behavior change.
 
-3. `feat(bootstrap): add orchai-control.bat and a root orchai.bat launcher`
+2. `feat(bootstrap): add orchai-control.bat and a root orchai.bat launcher`
 
    Objective: give OrchAI routine local lifecycle control (status/
    start/stop/restart) and a single, friendly root entrypoint, letting
@@ -247,15 +231,15 @@ demand.
    tracking survives a restart and reports a clear status when nothing
    is running; `uv run ruff check` and `uv run pytest` unaffected.
 
-   Planned semantic decision: patch bump from `0.3.2` to `0.3.3` ---
+   Planned semantic decision: patch bump from `0.4.1` to `0.4.2` ---
    routine local tooling, no public API/CLI contract change.
 
-4. `feat(installer): add a Windows bootstrap executable wrapping orchai.bat`
+3. `feat(installer): add a Windows bootstrap executable wrapping orchai.bat`
 
    Objective: let a user who is not comfortable choosing scripts
    manually get from a downloaded or cloned repository to a running
    OrchAI with one double-click, without introducing a second, hidden
-   orchestration layer alongside the `.bat` launchers from steps 2-3.
+   orchestration layer alongside the `.bat` launchers from steps 1-2.
 
    Main scope: reuse OrchFlow's own bootstrap prototype
    (`tools/windows/bootstrap/OrchFlow.Bootstrap.csproj` +
@@ -270,7 +254,7 @@ demand.
    current directory looking for `orchai.bat`, validates `orchai.bat`/
    `orchai-setup.bat`/`orchai-control.bat` exist, checks local
    prerequisites (`uv` always; `node` only when the resolved start
-   mode is Desktop, per step 2's Node.js scoping), then runs
+   mode is Desktop, per step 1's Node.js scoping), then runs
    `orchai-setup.bat check` → `orchai-control.bat start` →
    `orchai-control.bat status`, opening the local API URL in a browser
    (read from `.env`/`ORCHAI_API_HOST`/`ORCHAI_API_PORT`, mirroring how
@@ -288,7 +272,7 @@ demand.
    already produces the Desktop application's own executable; this
    bootstrap is the first-run onboarding layer in front of the whole
    repository (setup plus choice of mode), not a repackaging of the
-   Desktop shell itself. As with step 2-3's OrchFlow-mirroring, re-read
+   Desktop shell itself. As with step 1-2's OrchFlow-mirroring, re-read
    OrchFlow's current prototype files rather than assuming this
    description stays accurate --- that project's bootstrap is itself
    still a first prototype and may keep changing.
@@ -307,7 +291,7 @@ demand.
    overwritten; `uv run ruff check` and `uv run pytest` unaffected (no
    Python source changes).
 
-   Planned semantic decision: patch bump from `0.3.3` to `0.3.4` --- an
+   Planned semantic decision: patch bump from `0.4.2` to `0.4.3` --- an
    onboarding convenience layer over already-existing, already-
    versioned launchers; no new public contract.
 
