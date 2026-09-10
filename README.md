@@ -10,7 +10,7 @@ business logic in the core.
 
 ## Current Status
 
-Version: `v0.4.1`
+Version: `v0.4.2`
 
 The current implementation is an executable foundation, not a complete
 product.
@@ -63,34 +63,72 @@ environment directly:
 .venv\Scripts\python.exe -m pytest
 ```
 
-## Windows Setup Launcher
+## Windows Local Launcher
 
-For first-time Windows setup or to re-verify a local checkout, use:
+For first-time Windows setup or day-to-day local startup in a cloned
+checkout, the recommended root entrypoint is:
+
+```bat
+orchai.bat
+```
+
+The unified launcher provides `[1] Run checks and start OrchAI
+(headless API)`, `[2] Run checks and start OrchAI (Desktop)`, `[3]
+Open API docs in browser`, `[4] Go to Setup menu`, `[5] Go to Control
+menu`, and `[0] Exit`. It delegates to the auxiliary launchers under
+`tools\windows\`, mirroring the sibling project OrchFlow's own
+`orchflow.bat` model, adapted for OrchAI's headless-API-vs-Desktop
+choice (OrchFlow only has one deployment mode).
+
+For direct access to the setup implementation path, use:
 
 ```bat
 tools\windows\orchai-setup.bat
 ```
 
-The launcher offers a small first-run menu: check environment,
-prerequisites, and dependencies for headless API use, or the same
-check extended for Desktop use (adds the Node.js/frontend build
-check). The check flow verifies Python 3.14+ and `uv` (plus Node.js
-for Desktop mode), creates `.env` from the committed `.env.example`
-when it does not already exist (without overwriting one that does),
-runs `uv sync --dev`, builds the Desktop frontend only in Desktop mode,
-runs `uv run orchai db sync`, and validates the CLI. It reports a
-missing prerequisite with an actionable message instead of a raw tool
-error, and never installs global software automatically. The same
-check also runs non-interactively:
+The setup launcher's first-run menu checks environment, prerequisites,
+and dependencies for headless API use, or the same check extended for
+Desktop use (adds the Node.js/frontend build check). It verifies
+Python 3.14+ and `uv` (plus Node.js for Desktop mode), creates `.env`
+from the committed `.env.example` when it does not already exist
+(without overwriting one that does), runs `uv sync --dev`, builds the
+Desktop frontend only in Desktop mode, runs `uv run orchai db sync`,
+and validates the CLI. It reports a missing prerequisite with an
+actionable message instead of a raw tool error, and never installs
+global software automatically. The same check also runs
+non-interactively:
 
 ```bat
 tools\windows\orchai-setup.bat check
 tools\windows\orchai-setup.bat check desktop
 ```
 
-A unified root launcher and routine start/stop/restart process control
-are tracked as the next `docs/TO-DO.md` steps, mirroring the sibling
-project OrchFlow's own Windows launcher model.
+For direct day-to-day process control, use:
+
+```bat
+tools\windows\orchai-control.bat
+```
+
+The control launcher provides `[1] Check status`, `[2] Start
+(headless API)`, `[3] Start (Desktop)`, `[4] Stop`, `[5] Restart (same
+mode as last start)`, and `[0] Exit`. It writes a PID file, process
+metadata, a generated service command, and a startup log under
+`ORCHAI_RUNTIME_DIR` (default `runtime\`, gitignored), stops only a
+process it previously tracked, and honors `ORCHAI_API_HOST`/
+`ORCHAI_API_PORT` from local environment configuration for headless
+API mode. Non-interactively:
+
+```bat
+tools\windows\orchai-control.bat status
+tools\windows\orchai-control.bat start api
+tools\windows\orchai-control.bat start desktop
+tools\windows\orchai-control.bat stop
+tools\windows\orchai-control.bat restart
+```
+
+A Windows bootstrap executable wrapping `orchai.bat` for a
+double-click first-run experience is tracked as the next
+`docs/TO-DO.md` step.
 
 ## Configuration
 

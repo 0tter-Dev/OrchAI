@@ -27,11 +27,11 @@ executes against the project.
 uv sync
 ```
 
-On Windows, `tools\windows\orchai-setup.bat` runs this same step (plus
-`.env` preparation, `db sync`, and a CLI check) as one guided,
-first-run-friendly launcher — see
+On Windows, `orchai.bat` (repository root) runs this same step (plus
+`.env` preparation, `db sync`, a CLI check, and starting OrchAI) as
+one guided, first-run-friendly launcher — see
 [`OPERATIONS-REFERENCE.md`](OPERATIONS-REFERENCE.md)'s Windows Local
-Setup section.
+Setup And Control section.
 
 ### 1. Configure The Database
 
