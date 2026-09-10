@@ -10,7 +10,7 @@ business logic in the core.
 
 ## Current Status
 
-Version: `v0.4.0`
+Version: `v0.4.1`
 
 The current implementation is an executable foundation, not a complete
 product.
@@ -62,6 +62,35 @@ environment directly:
 ``` powershell
 .venv\Scripts\python.exe -m pytest
 ```
+
+## Windows Setup Launcher
+
+For first-time Windows setup or to re-verify a local checkout, use:
+
+```bat
+tools\windows\orchai-setup.bat
+```
+
+The launcher offers a small first-run menu: check environment,
+prerequisites, and dependencies for headless API use, or the same
+check extended for Desktop use (adds the Node.js/frontend build
+check). The check flow verifies Python 3.14+ and `uv` (plus Node.js
+for Desktop mode), creates `.env` from the committed `.env.example`
+when it does not already exist (without overwriting one that does),
+runs `uv sync --dev`, builds the Desktop frontend only in Desktop mode,
+runs `uv run orchai db sync`, and validates the CLI. It reports a
+missing prerequisite with an actionable message instead of a raw tool
+error, and never installs global software automatically. The same
+check also runs non-interactively:
+
+```bat
+tools\windows\orchai-setup.bat check
+tools\windows\orchai-setup.bat check desktop
+```
+
+A unified root launcher and routine start/stop/restart process control
+are tracked as the next `docs/TO-DO.md` steps, mirroring the sibling
+project OrchFlow's own Windows launcher model.
 
 ## Configuration
 

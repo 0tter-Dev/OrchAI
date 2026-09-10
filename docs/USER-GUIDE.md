@@ -27,6 +27,12 @@ executes against the project.
 uv sync
 ```
 
+On Windows, `tools\windows\orchai-setup.bat` runs this same step (plus
+`.env` preparation, `db sync`, and a CLI check) as one guided,
+first-run-friendly launcher — see
+[`OPERATIONS-REFERENCE.md`](OPERATIONS-REFERENCE.md)'s Windows Local
+Setup section.
+
 ### 1. Configure The Database
 
 OrchAI is PostgreSQL-first for shared or team operation; SQLite
