@@ -1977,7 +1977,15 @@ def run_execution(
         help="Database URL. Defaults to ORCHAI_DATABASE_URL, or PostgreSQL (postgresql://orchai:orchai@localhost:5432/orchai) when unset. Pass sqlite:///... or the 'sqlite' shorthand for fast local/test runs.",
     ),
 ) -> None:
-    """Run one authorized execution through the execution engine."""
+    """Run one authorized execution through the execution engine.
+
+    The HTTP API also exposes a streaming variant
+    (`POST /executions/{id}/run-stream`, SSE) for incremental provider
+    output. The one-shot CLI process has no persistent connection to
+    stream incremental output over, so it intentionally stays on this
+    non-streaming path only -- mirroring how conversation streaming has
+    no CLI command either.
+    """
 
     require_cli_permission("executions:manage")
     settings = load_settings()

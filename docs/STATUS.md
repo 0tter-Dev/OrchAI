@@ -20,8 +20,8 @@ forward.
 
 ## Current Project Stage
 
-OrchAI is currently in the `v0.2.10` implementation stage as of
-`2026-09-09`.
+OrchAI is currently in the `v0.3.0` implementation stage as of
+`2026-09-10`.
 
 ## Feature Table
 
@@ -59,7 +59,7 @@ OrchAI is currently in the `v0.2.10` implementation stage as of
 | Identity and Access Management | Users, JWT auth, RBAC permissions | implemented | Enforcement is opt-in via `ORCHAI_AUTH_ENFORCED` (default `false`) |
 | Execution Mode Baseline | MANUAL/SUGGESTED/AUTOMATIC execution mode enforcement | implemented | — |
 | AI Provider Adapter (LiteLLM) | Single adapter covering OpenAI/Anthropic/Gemini/Ollama and other OpenAI-API-compatible runtimes | implemented | Replaced the separate Ollama/OpenAI-Codex adapters |
-| AI Provider Streaming (execute_stream) | Task-bounded streaming execution | in_progress | `ExecutionEngine.run_stream()` reassembles chunks into one atomic terminal result (unit-tested); no API/CLI/Desktop caller wired yet |
+| AI Provider Streaming (execute_stream) | Task-bounded streaming execution | in_progress | `ExecutionEngine.run_stream()` reassembles chunks into one atomic terminal result; externally reachable via `POST /executions/{id}/run-stream` (SSE, API-only, CLI intentionally non-streaming); Desktop Approval Card consumption not wired yet |
 | Conversation Domain Model | Persistent conversation/message history | implemented | Streaming supported |
 | Module Concept (Forge, Studio) | Pluggable module registry | in_progress | Forge fully wired; Studio is a discovery-plus-chat skeleton |
 | Desktop Single-User Identity | Single local user for the desktop shell | implemented | — |
@@ -71,7 +71,7 @@ OrchAI is currently in the `v0.2.10` implementation stage as of
 | API Implementation (operational) | Fine-grained `/tasks`, `/authorizations`, `/executions`, etc. | implemented | — |
 | API Implementation (chat-first) | `/requests` surface | implemented | — |
 | CLI Implementation | `orchai` command surface | implemented | — |
-| Automated Test Suite | Unit and integration coverage | implemented | 296 tests passing |
+| Automated Test Suite | Unit and integration coverage | implemented | 299 tests passing |
 | Deployment Implementation | Container/deployment automation | in_progress | Root `Dockerfile` exists and was validated manually; no CI build step, compose file, or deployment automation yet |
 
 ## Implementation Notes
@@ -80,5 +80,5 @@ OrchAI is currently in the `v0.2.10` implementation stage as of
 - `ORCHAI_AUTH_ENFORCED` remains `false` by default; identity/access enforcement is fully implemented but not yet turned on.
 - The broader per-user action/role/model authorization revisit (multi-user Project Adapter binding) is deliberately not started; it requires the user's explicit authorization first, per `docs/TO-DO.md`'s Cross-Cutting Rules.
 - `AutomaticExecutionPolicy`'s allowed-operations list remains hardcoded; no CLI/API surface configures it yet.
-- The full test suite is 296 tests, `uv run ruff check` clean, `uv lock --check` consistent.
+- The full test suite is 299 tests, `uv run ruff check` clean, `uv lock --check` consistent.
 - For the detailed history of how the project reached this state, see `docs/HISTORY.md`, frozen as of this redesign (`2026-09-07`). Going forward this document is a snapshot, not a changelog; release notes generated from the Git log cover what changed release-over-release.

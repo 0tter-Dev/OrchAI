@@ -12,11 +12,17 @@ from orchai.interfaces.api import app
 _TEST_SECRET_KEY = "api-test-secret-key-with-at-least-32-characters"
 
 
-def _collect_sse_events(client: TestClient, path: str, *, json_body: dict) -> list[dict]:
+def _collect_sse_events(
+    client: TestClient,
+    path: str,
+    *,
+    json_body: dict | None = None,
+    params: dict | None = None,
+) -> list[dict]:
     """Post to an SSE endpoint and return every `data:` payload, parsed."""
 
     events = []
-    with client.stream("POST", path, json=json_body) as response:
+    with client.stream("POST", path, json=json_body, params=params) as response:
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/event-stream")
         for line in response.iter_lines():
@@ -724,7 +730,7 @@ def test_api_health_endpoint_reports_version() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "0.2.10"}
+    assert response.json() == {"status": "ok", "version": "0.3.0"}
 
 
 def test_api_direct_task_and_execution_lifecycle_endpoints(tmp_path) -> None:
@@ -1031,6 +1037,129 @@ def test_api_run_execution_endpoint_drives_execution_engine(tmp_path) -> None:
     assert run_response.status_code == 200
     assert run_response.json()["state"] == "COMPLETED"
     assert run_response.json()["result"]["success"] is True
+
+
+def _authorized_execution_via_api(client: TestClient, tmp_path, *, database_url: str) -> str:
+    """Build one AUTHORIZED execution through the API, mirroring
+    test_api_run_execution_endpoint_drives_execution_engine's setup, and
+    return its execution_id."""
+
+    (tmp_path / ".git").mkdir(exist_ok=True)
+    (tmp_path / "README.md").write_text("Project docs", encoding="utf-8")
+
+    project_response = client.post(
+        "/projects",
+        json={"project_root": str(tmp_path), "database_url": database_url},
+    )
+    task_response = client.post(
+        "/tasks",
+        json={
+            "title": "Run-stream execution task",
+            "description": "Drive execution engine streaming through API",
+            "requested_change": "Run with stub provider",
+            "project_id": project_response.json()["project_id"],
+            "execution_mode": "SUGGESTED",
+            "database_url": database_url,
+        },
+    )
+    authorization_response = client.post(
+        "/authorizations/request",
+        json={
+            "task_id": task_response.json()["task_id"],
+            "role": "DEVELOPER",
+            "action": "IMPLEMENT",
+            "reason": "Need execution authorization",
+            "requester": "api-test",
+            "execution_mode": "SUGGESTED",
+            "model_id": "local-demo",
+            "context_scope": ["README.md"],
+            "database_url": database_url,
+        },
+    )
+    authorization_id = authorization_response.json()["authorization_id"]
+    client.post(
+        f"/authorizations/{authorization_id}/decision",
+        json={
+            "status": "GRANTED",
+            "decided_by": "api-manager",
+            "reason": "Approved",
+            "database_url": database_url,
+        },
+    )
+    execution_response = client.post(
+        "/executions/request",
+        json={
+            "task_id": task_response.json()["task_id"],
+            "role": "DEVELOPER",
+            "action": "IMPLEMENT",
+            "model_id": "local-demo",
+            "authorization_id": authorization_id,
+            "project_id": project_response.json()["project_id"],
+            "requested_context": ["README.md"],
+            "authorized_context": ["README.md"],
+            "database_url": database_url,
+        },
+    )
+    return execution_response.json()["execution_id"]
+
+
+def test_api_run_execution_stream_endpoint_streams_deltas_then_done(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    client = TestClient(app)
+    execution_id = _authorized_execution_via_api(client, tmp_path, database_url=database_url)
+
+    events = _collect_sse_events(
+        client,
+        f"/executions/{execution_id}/run-stream",
+        params={"database_url": database_url},
+    )
+
+    assert [event["type"] for event in events[:-1]] == ["delta"] * (len(events) - 1)
+    assert "".join(event["content"] for event in events[:-1] if event["content"]) == (
+        "Stub provider processed 1 authorized context item(s)."
+    )
+    assert events[-1]["type"] == "done"
+    assert events[-1]["execution"]["state"] == "COMPLETED"
+    assert events[-1]["execution"]["result"]["success"] is True
+    assert events[-1]["execution"]["result"]["output"] == (
+        "Stub provider processed 1 authorized context item(s)."
+    )
+
+    # The streamed path recorded exactly one terminal Execution state,
+    # same as the non-streaming /run endpoint.
+    show_response = client.get(
+        f"/executions/{execution_id}", params={"database_url": database_url}
+    )
+    assert show_response.json()["state"] == "COMPLETED"
+
+
+def test_api_run_execution_stream_endpoint_rejects_an_unknown_execution(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    client = TestClient(app)
+
+    response = client.post(
+        "/executions/does-not-exist/run-stream",
+        params={"database_url": database_url},
+    )
+
+    assert response.status_code == 404
+
+
+def test_api_run_execution_stream_endpoint_rejects_a_non_authorized_execution(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    client = TestClient(app)
+    execution_id = _authorized_execution_via_api(client, tmp_path, database_url=database_url)
+    first_run = client.post(
+        f"/executions/{execution_id}/run", params={"database_url": database_url}
+    )
+    assert first_run.json()["state"] == "COMPLETED"
+
+    response = client.post(
+        f"/executions/{execution_id}/run-stream",
+        params={"database_url": database_url},
+    )
+
+    assert response.status_code == 409
 
 
 def test_api_dispatch_execution_endpoint_schedules_async_execution(tmp_path) -> None:
