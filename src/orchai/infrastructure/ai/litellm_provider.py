@@ -139,6 +139,7 @@ class LiteLLMProvider(AIProviderPort, ConversationAIProviderPort):
             yield AIProviderStreamChunk(
                 delta=delta,
                 finished=finished,
+                provider_name="litellm",
                 finish_reason="stop" if finished else None,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,

@@ -62,8 +62,10 @@ class StubAIProviderAdapter(AIProviderPort, ConversationAIProviderPort):
     ) -> AsyncIterator[AIProviderStreamChunk]:
         context_count = len(request.context)
         text = f"Stub provider processed {context_count} authorized context item(s)."
-        yield AIProviderStreamChunk(delta=text)
-        yield AIProviderStreamChunk(delta="", finished=True, finish_reason="stop")
+        yield AIProviderStreamChunk(delta=text, provider_name="stub")
+        yield AIProviderStreamChunk(
+            delta="", finished=True, provider_name="stub", finish_reason="stop"
+        )
 
     async def cancel(self, execution_id) -> None:
         return None
