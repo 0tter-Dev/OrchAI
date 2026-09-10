@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -34,6 +35,7 @@ from orchai.application.orchestration.results import (
     suggestion_fields,
 )
 from orchai.application.orchestration.stages import (
+    TaskStageWorkflow,
     TaskWorkflowStage,
     operation_workflow,
     resolve_task_stage,
@@ -53,15 +55,17 @@ from orchai.application.projects.ports import (
 from orchai.application.suggestions import SuggestionEngine
 from orchai.application.tasks import CreateTaskCommand, TaskService, TransitionTaskCommand
 from orchai.domain.actions import ActionName
+from orchai.domain.authorization import Authorization
 from orchai.domain.identifiers import ModelId, TaskId
 from orchai.domain.projects import Project, ProjectOperation, ProviderTarget
 from orchai.domain.roles import RoleName
 from orchai.domain.suggestions import Suggestion
-from orchai.domain.tasks import ExecutionMode, TaskState, TaskStateMachine
+from orchai.domain.tasks import ExecutionMode, Task, TaskState, TaskStateMachine
 from orchai.infrastructure.projects.errors import ProjectAdapterError
 
 __all__ = [
     "OrchestrationFlowResult",
+    "OrchestrationStreamEvent",
     "Orchestrator",
     "ProjectAdapterFactory",
     "ProjectOperationResult",
@@ -206,6 +210,48 @@ class TaskWorkflowStageResult:
 
     def as_dict(self) -> dict[str, str]:
         return dataclass_as_str_dict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class OrchestrationStreamEvent:
+    """One incremental event from `run_task_workflow_stage_stream()`.
+
+    Mirrors `AIProviderStreamChunk`/`ConversationStreamEvent`'s
+    delta-then-done shape one layer up: `type="delta"` carries one
+    incremental chunk of AI provider output (only emitted for a stage
+    where `TaskStageWorkflow.uses_ai` is true); the stream always ends
+    with exactly one `type="done"` event carrying the same
+    `TaskWorkflowStageResult` `run_task_workflow_stage()` would have
+    returned for an equivalent non-streaming call -- a stage that never
+    reaches AI execution (blocked, no suggestion, or the non-AI TEST
+    stage) emits only that single `done` event.
+    """
+
+    type: str
+    delta: str = ""
+    finished: bool = False
+    result: TaskWorkflowStageResult | None = None
+
+
+@dataclass(slots=True)
+class _PreparedWorkflowStage:
+    """Shared setup result for one workflow-stage advance attempt.
+
+    Produced by `Orchestrator._prepare_workflow_stage()` and consumed by
+    both `run_task_workflow_stage()` and its streaming counterpart --
+    everything through policy/authorization and the stage's
+    `start_state` transition is identical regardless of whether the
+    stage's own AI execution (if any) streams or not.
+    """
+
+    task: Task
+    project: Project
+    adapter: ProjectAdapter
+    stage: TaskWorkflowStage
+    workflow: TaskStageWorkflow
+    context_paths: tuple[str, ...]
+    authorization: Authorization
+    suggestion: Suggestion | None
 
 
 class Orchestrator:
@@ -592,6 +638,93 @@ class Orchestrator:
     ) -> TaskWorkflowStageResult:
         """Advance one persisted task through one workflow stage."""
 
+        prepared = await self._prepare_workflow_stage(command)
+        if isinstance(prepared, TaskWorkflowStageResult):
+            return prepared
+
+        if not prepared.workflow.uses_ai:
+            return await self._finalize_test_stage_result(prepared=prepared, command=command)
+
+        execution = await self._execution_service.request_execution(
+            RequestExecutionCommand(
+                task_id=prepared.task.id,
+                role=prepared.workflow.role,
+                action=prepared.workflow.action,
+                model_id=ModelId(command.model),
+                authorization_id=prepared.authorization.id,
+                project_id=prepared.project.id,
+                requested_context=prepared.context_paths,
+                authorized_context=prepared.context_paths,
+            )
+        )
+        execution = await self._execution_engine.run(execution.id)
+        return await self._finalize_ai_stage_result(
+            execution=execution, prepared=prepared, command=command
+        )
+
+    async def run_task_workflow_stage_stream(
+        self,
+        command: RunTaskWorkflowStageCommand,
+    ) -> AsyncIterator[OrchestrationStreamEvent]:
+        """Streaming counterpart of :meth:`run_task_workflow_stage`.
+
+        Shares the exact same setup, gating, and result-finalization
+        logic (`_prepare_workflow_stage`, `_finalize_ai_stage_result`,
+        `_finalize_test_stage_result`) -- the only difference is that an
+        AI-driven stage's execution is run through
+        `ExecutionEngine.run_stream()` instead of `run()`, with each
+        `AIProviderStreamChunk`'s delta forwarded onward as a `delta`
+        event. A stage that never reaches AI execution (blocked, no
+        suggestion, or the non-AI TEST stage) yields exactly one `done`
+        event and nothing else, identical in substance to what
+        `run_task_workflow_stage()` would have returned.
+        """
+
+        prepared = await self._prepare_workflow_stage(command)
+        if isinstance(prepared, TaskWorkflowStageResult):
+            yield OrchestrationStreamEvent(type="done", result=prepared)
+            return
+
+        if not prepared.workflow.uses_ai:
+            result = await self._finalize_test_stage_result(prepared=prepared, command=command)
+            yield OrchestrationStreamEvent(type="done", result=result)
+            return
+
+        execution = await self._execution_service.request_execution(
+            RequestExecutionCommand(
+                task_id=prepared.task.id,
+                role=prepared.workflow.role,
+                action=prepared.workflow.action,
+                model_id=ModelId(command.model),
+                authorization_id=prepared.authorization.id,
+                project_id=prepared.project.id,
+                requested_context=prepared.context_paths,
+                authorized_context=prepared.context_paths,
+            )
+        )
+        async for chunk in self._execution_engine.run_stream(execution.id):
+            yield OrchestrationStreamEvent(type="delta", delta=chunk.delta, finished=chunk.finished)
+        execution = await self._execution_service.get_execution(execution.id)
+        result = await self._finalize_ai_stage_result(
+            execution=execution, prepared=prepared, command=command
+        )
+        yield OrchestrationStreamEvent(type="done", result=result)
+
+    async def _prepare_workflow_stage(
+        self,
+        command: RunTaskWorkflowStageCommand,
+    ) -> _PreparedWorkflowStage | TaskWorkflowStageResult:
+        """Shared setup for one workflow-stage advance attempt.
+
+        Returns a `TaskWorkflowStageResult` directly for every early-exit
+        case (no project, no suggestion, missing context/documentation
+        path, policy denial) -- the caller (`run_task_workflow_stage()`
+        or its streaming counterpart) returns/yields it as-is, since
+        nothing runs in those cases regardless of streaming. Otherwise
+        returns a `_PreparedWorkflowStage` ready for the stage's own
+        AI or test execution.
+        """
+
         task = await self._task_service.get_task(command.task_id)
         if task.project_id is None:
             return await self._task_workflow_stage_result(
@@ -726,21 +859,83 @@ class Orchestrator:
                 )
             )
 
-        if workflow.uses_ai:
-            execution = await self._execution_service.request_execution(
-                RequestExecutionCommand(
-                    task_id=task.id,
-                    role=workflow.role,
-                    action=workflow.action,
-                    model_id=ModelId(command.model),
-                    authorization_id=authorization.id,
-                    project_id=project.id,
-                    requested_context=context_paths,
-                    authorized_context=context_paths,
-                )
+        return _PreparedWorkflowStage(
+            task=task,
+            project=project,
+            adapter=adapter,
+            stage=stage,
+            workflow=workflow,
+            context_paths=context_paths,
+            authorization=authorization,
+            suggestion=suggestion,
+        )
+
+    async def _finalize_ai_stage_result(
+        self,
+        *,
+        execution,
+        prepared: _PreparedWorkflowStage,
+        command: RunTaskWorkflowStageCommand,
+    ) -> TaskWorkflowStageResult:
+        """Turn one terminal AI-driven `Execution` into the stage result.
+
+        Shared tail of the `uses_ai` branch for both
+        `run_task_workflow_stage()` (passed `run()`'s result) and
+        `run_task_workflow_stage_stream()` (passed `run_stream()`'s
+        reassembled terminal `Execution`, re-fetched after the stream
+        ends) -- identical handling either way, so completion/blocked
+        transitions and documentation writing need no branching by
+        streamed-vs-not.
+        """
+
+        task, project, stage, workflow, authorization, suggestion = (
+            prepared.task,
+            prepared.project,
+            prepared.stage,
+            prepared.workflow,
+            prepared.authorization,
+            prepared.suggestion,
+        )
+        if execution.result is None or not execution.result.success:
+            task = await self._transition_task_to_blocked(task)
+            return await self._task_workflow_stage_result(
+                task_id=str(task.id),
+                project_id=str(project.id),
+                stage=stage.value,
+                task_state=task.state.value,
+                authorization_id=str(authorization.id),
+                execution_id=str(execution.id),
+                execution_state=execution.state.value,
+                output=execution.result.output if execution.result is not None else "",
+                storage_label=command.storage_label,
+                suggestion=suggestion,
+                blocked_reason=_execution_failure_reason(execution),
             )
-            execution = await self._execution_engine.run(execution.id)
-            if execution.result is None or not execution.result.success:
+
+        output = execution.result.output
+        resource = ""
+        if workflow.documentation_required:
+            try:
+                documentation_reference = await _context_reference_for(
+                    prepared.adapter,
+                    command.documentation_path,
+                )
+                write_result = await prepared.adapter.write_documentation(
+                    documentation_reference,
+                    output,
+                )
+                resource = write_result.resource
+                await publish_project_operation_completed(
+                    event_publisher=self._event_publisher,
+                    project_id=project.id,
+                    operation=ProjectOperation.WRITE_DOCUMENTATION,
+                    payload={
+                        "resource": write_result.resource,
+                        "bytes_written": str(write_result.bytes_written),
+                        "output": f"wrote {write_result.bytes_written} byte(s)",
+                    },
+                )
+            except ProjectAdapterError as exc:
                 task = await self._transition_task_to_blocked(task)
                 return await self._task_workflow_stage_result(
                     task_id=str(task.id),
@@ -750,73 +945,51 @@ class Orchestrator:
                     authorization_id=str(authorization.id),
                     execution_id=str(execution.id),
                     execution_state=execution.state.value,
-                    output=execution.result.output if execution.result is not None else "",
+                    output=output,
                     storage_label=command.storage_label,
                     suggestion=suggestion,
-                    blocked_reason=_execution_failure_reason(execution),
+                    blocked_reason=str(exc),
                 )
 
-            output = execution.result.output
-            resource = ""
-            if workflow.documentation_required:
-                try:
-                    documentation_reference = await _context_reference_for(
-                        adapter,
-                        command.documentation_path,
-                    )
-                    write_result = await adapter.write_documentation(
-                        documentation_reference,
-                        output,
-                    )
-                    resource = write_result.resource
-                    await publish_project_operation_completed(
-                        event_publisher=self._event_publisher,
-                        project_id=project.id,
-                        operation=ProjectOperation.WRITE_DOCUMENTATION,
-                        payload={
-                            "resource": write_result.resource,
-                            "bytes_written": str(write_result.bytes_written),
-                            "output": f"wrote {write_result.bytes_written} byte(s)",
-                        },
-                    )
-                except ProjectAdapterError as exc:
-                    task = await self._transition_task_to_blocked(task)
-                    return await self._task_workflow_stage_result(
-                        task_id=str(task.id),
-                        project_id=str(project.id),
-                        stage=stage.value,
-                        task_state=task.state.value,
-                        authorization_id=str(authorization.id),
-                        execution_id=str(execution.id),
-                        execution_state=execution.state.value,
-                        output=output,
-                        storage_label=command.storage_label,
-                        suggestion=suggestion,
-                        blocked_reason=str(exc),
-                    )
-
-            if task.state is not workflow.success_state:
-                task = await self._task_service.transition_task(
-                    TransitionTaskCommand(
-                        task_id=task.id,
-                        target_state=workflow.success_state,
-                        source="application.orchestration.tasks",
-                    )
+        if task.state is not workflow.success_state:
+            task = await self._task_service.transition_task(
+                TransitionTaskCommand(
+                    task_id=task.id,
+                    target_state=workflow.success_state,
+                    source="application.orchestration.tasks",
                 )
-            return await self._task_workflow_stage_result(
-                task_id=str(task.id),
-                project_id=str(project.id),
-                stage=stage.value,
-                task_state=task.state.value,
-                authorization_id=str(authorization.id),
-                execution_id=str(execution.id),
-                execution_state=execution.state.value,
-                output=output,
-                resource=resource,
-                storage_label=command.storage_label,
-                suggestion=suggestion,
             )
+        return await self._task_workflow_stage_result(
+            task_id=str(task.id),
+            project_id=str(project.id),
+            stage=stage.value,
+            task_state=task.state.value,
+            authorization_id=str(authorization.id),
+            execution_id=str(execution.id),
+            execution_state=execution.state.value,
+            output=output,
+            resource=resource,
+            storage_label=command.storage_label,
+            suggestion=suggestion,
+        )
 
+    async def _finalize_test_stage_result(
+        self,
+        *,
+        prepared: _PreparedWorkflowStage,
+        command: RunTaskWorkflowStageCommand,
+    ) -> TaskWorkflowStageResult:
+        """Run and finalize the non-AI TEST stage (never streamed)."""
+
+        task, project, stage, workflow, authorization, suggestion, adapter = (
+            prepared.task,
+            prepared.project,
+            prepared.stage,
+            prepared.workflow,
+            prepared.authorization,
+            prepared.suggestion,
+            prepared.adapter,
+        )
         try:
             command_result = await adapter.run_tests(args=command.test_args)
         except ProjectAdapterError as exc:

@@ -730,7 +730,7 @@ def test_api_health_endpoint_reports_version() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "0.3.0"}
+    assert response.json() == {"status": "ok", "version": "0.4.0"}
 
 
 def test_api_direct_task_and_execution_lifecycle_endpoints(tmp_path) -> None:
@@ -1737,6 +1737,133 @@ def test_api_requests_approve_endpoint_finds_and_grants_pending_authorization(
     assert second_approve_response.status_code == 200
     assert second_approve_response.json()["approved"] is False
     assert second_approve_response.json()["status"] == "no_pending_authorization"
+
+
+def test_api_requests_approve_stream_endpoint_streams_the_presented_suggestion_case(
+    tmp_path,
+) -> None:
+    """Streaming counterpart of
+    test_api_requests_approve_endpoint_resolves_presented_suggestion_via_advance:
+    the common SUGGESTED-mode case (only a PRESENTED suggestion, no
+    standalone Authorization yet) must stream the PLAN stage's AI
+    execution as delta events, then a final done event carrying the same
+    payload shape POST /requests/{id}/approve already returns."""
+
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "README.md").write_text("Project docs", encoding="utf-8")
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    client = TestClient(app)
+
+    create_response = client.post(
+        "/requests",
+        json={
+            "project_root": str(tmp_path),
+            "prompt": "Implement the feature described in README.md",
+            "context_paths": ["README.md"],
+            "database_url": database_url,
+        },
+    )
+    request_id = create_response.json()["request_id"]
+
+    events = _collect_sse_events(
+        client,
+        f"/requests/{request_id}/approve-stream",
+        json_body={
+            "decided_by": "chat-user",
+            "reason": "Approve the PLAN stage",
+            "context_paths": ["README.md"],
+            "database_url": database_url,
+        },
+    )
+
+    assert [event["type"] for event in events[:-1]] == ["delta"] * (len(events) - 1)
+    assert "".join(event["content"] for event in events[:-1] if event["content"]) == (
+        "Stub provider processed 1 authorized context item(s)."
+    )
+    assert events[-1]["type"] == "done"
+    assert events[-1]["approved"] is True
+    assert events[-1]["blocked_reason"] == ""
+    assert events[-1]["task_state"] == "PLANNED"
+    assert events[-1]["suggested_role"] == "TASK_PLANNER"
+    assert events[-1]["suggested_action"] == "PLAN"
+    assert events[-1]["suggestion_status"] == "ACCEPTED"
+
+    flow_after_response = client.get(
+        f"/requests/{request_id}/flow",
+        params={"database_url": database_url},
+    )
+    assert flow_after_response.json()["task"]["state"] == "PLANNED"
+
+
+def test_api_requests_approve_stream_endpoint_grants_a_pending_authorization_immediately(
+    tmp_path,
+) -> None:
+    """Streaming counterpart of
+    test_api_requests_approve_endpoint_finds_and_grants_pending_authorization:
+    when a standalone Authorization is already pending, there is nothing
+    to run yet, so the stream carries exactly one done event -- no delta
+    events -- identical in substance to the non-streaming /approve
+    response."""
+
+    (tmp_path / ".git").mkdir()
+    database_url = f"sqlite:///{tmp_path / 'orchai.db'}"
+    client = TestClient(app)
+
+    project_response = client.post(
+        "/projects",
+        json={"project_root": str(tmp_path), "database_url": database_url},
+    )
+    project_id = project_response.json()["project_id"]
+
+    task_response = client.post(
+        "/tasks",
+        json={
+            "title": "Approve-stream regression task",
+            "description": "Covers the chat-first streaming approve endpoint",
+            "requested_change": "Implement a change requiring authorization",
+            "project_id": project_id,
+            "execution_mode": "SUGGESTED",
+            "database_url": database_url,
+        },
+    )
+    request_id = task_response.json()["task_id"]
+
+    authorization_response = client.post(
+        "/authorizations/request",
+        json={
+            "task_id": request_id,
+            "role": "DEVELOPER",
+            "action": "IMPLEMENT",
+            "reason": "Need execution authorization",
+            "requester": "chat-user",
+            "execution_mode": "SUGGESTED",
+            "model_id": "local-demo",
+            "database_url": database_url,
+        },
+    )
+    authorization_id = authorization_response.json()["authorization_id"]
+
+    events = _collect_sse_events(
+        client,
+        f"/requests/{request_id}/approve-stream",
+        json_body={
+            "decided_by": "chat-user",
+            "reason": "Looks good, proceed.",
+            "database_url": database_url,
+        },
+    )
+
+    assert len(events) == 1
+    assert events[0]["type"] == "done"
+    assert events[0]["approved"] is True
+    assert events[0]["status"] == "GRANTED"
+    assert events[0]["authorization_id"] == authorization_id
+
+    authorization_show_response = client.get(
+        f"/authorizations/{authorization_id}",
+        params={"database_url": database_url},
+    )
+    assert authorization_show_response.json()["status"] == "GRANTED"
 
 
 def test_api_authorizations_list_supports_status_and_pending_only_filters(

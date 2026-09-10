@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 
 from orchai.application.orchestration.orchestrator import (
     AutomaticExecutionPolicy,
+    OrchestrationStreamEvent,
     Orchestrator,
     RunProjectOperationCommand,
     RunLocalFlowCommand,
@@ -126,6 +128,45 @@ async def run_task_workflow_stage(
         )
     )
     return result.as_dict()
+
+
+async def run_task_workflow_stage_stream(
+    *,
+    task_id: str,
+    dependencies: LocalFlowDependencies,
+    storage_label: str = "provided",
+    model: str = "local-task-stage",
+    stage: TaskWorkflowStage | None = None,
+    context_paths: tuple[str, ...] = (),
+    documentation_path: str = "",
+    test_args: tuple[str, ...] = (),
+    provider_target: ProviderTarget = ProviderTarget.LOCAL,
+    execution_mode: ExecutionMode | None = None,
+    approve_stage: bool = False,
+    requester: str = "operator",
+    decider: str = "operator",
+    automatic_policy: AutomaticExecutionPolicy | None = None,
+) -> AsyncIterator[OrchestrationStreamEvent]:
+    """Streaming counterpart of :func:`run_task_workflow_stage`."""
+
+    async for event in dependencies.orchestrator.run_task_workflow_stage_stream(
+        RunTaskWorkflowStageCommand(
+            task_id=TaskId(task_id),
+            storage_label=storage_label,
+            model=model,
+            stage=stage,
+            context_paths=context_paths,
+            documentation_path=documentation_path,
+            test_args=test_args,
+            provider_target=provider_target,
+            execution_mode=execution_mode,
+            approve_stage=approve_stage,
+            requester=requester,
+            decider=decider,
+            automatic_policy=automatic_policy or AutomaticExecutionPolicy(),
+        )
+    ):
+        yield event
 
 
 @dataclass(frozen=True, slots=True)

@@ -44,10 +44,12 @@ from orchai.application.identity import (
 )
 from orchai.application.modules import get_module, list_modules
 from orchai.application.orchestration import (
+    OrchestrationStreamEvent,
     TaskWorkflowStage,
     run_local_flow,
     run_project_operation,
     run_task_workflow_stage,
+    run_task_workflow_stage_stream,
 )
 from orchai.application.policies import AutomaticExecutionPolicy, PolicyOperation
 from orchai.application.projects import (
@@ -680,7 +682,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="OrchAI API",
-        version="0.3.0",
+        version="0.4.0",
         summary="OrchAI orchestration API — chat-first request interface and operational surface.",
         description=(
             "API-first interface for OrchAI orchestration. "
@@ -696,7 +698,7 @@ def create_app() -> FastAPI:
     async def root() -> dict[str, Any]:
         return {
             "service": "OrchAI API",
-            "version": "0.3.0",
+            "version": "0.4.0",
             "docs_url": str(app.docs_url),
             "redoc_url": str(app.redoc_url),
             "openapi_url": str(app.openapi_url),
@@ -735,7 +737,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["system"], summary="Check basic service health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "version": "0.3.0"}
+        return {"status": "ok", "version": "0.4.0"}
 
     @app.post(
         "/auth/login",
@@ -2287,6 +2289,108 @@ def create_app() -> FastAPI:
         }
 
     @app.post(
+        "/requests/{request_id}/approve-stream",
+        tags=["requests"],
+        summary="Approve a pending suggestion and stream the resulting stage execution (SSE)",
+        description=(
+            "Streaming counterpart of POST /requests/{request_id}/approve: "
+            "identical decision logic (standalone pending Authorization vs. "
+            "the common SUGGESTED-mode presented-suggestion case), but when "
+            "the approval leads to an AI-driven stage's execution, its "
+            "provider output streams incrementally as type: \"delta\" SSE "
+            "events. A final type: \"done\" event always carries the same "
+            "payload shape POST /requests/{request_id}/approve returns."
+        ),
+        dependencies=[Depends(require_permission("requests:approve"))],
+    )
+    async def approve_request_stream(
+        request_id: str,
+        body: RequestApproveBody,
+    ) -> StreamingResponse:
+        runtime = build_sqlalchemy_runtime(_database_url(body.database_url))
+
+        # Same two-case decision as approve_request (see its docstring):
+        # resolved eagerly, before the streaming response starts, so both
+        # cases can still be told apart the same way even though case 2
+        # continues into a streamed sub-call.
+        pending = await runtime.authorization_service.list_authorizations(
+            task_id=TaskId(request_id),
+            pending_only=True,
+            limit=20,
+        )
+
+        async def event_stream() -> AsyncIterator[str]:
+            if pending:
+                authorization = max(pending, key=lambda a: a.request.created_at)
+                updated = await runtime.authorization_service.decide_authorization(
+                    DecideAuthorizationCommand(
+                        authorization_id=authorization.id,
+                        status=AuthorizationDecisionStatus.GRANTED,
+                        decided_by=body.decided_by,
+                        reason=body.reason,
+                    )
+                )
+                payload = {
+                    "type": "done",
+                    "request_id": request_id,
+                    "approved": True,
+                    "status": "GRANTED",
+                    "authorization_id": str(updated.id),
+                    "flow_url": f"/requests/{request_id}/flow",
+                    "advance_url": f"/requests/{request_id}/advance",
+                    "message": (
+                        "Authorization granted. Use advance_url to continue "
+                        "to the next stage."
+                    ),
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+                return
+
+            suggestions = await runtime.suggestion_repository.list(
+                task_id=TaskId(request_id),
+                limit=20,
+            )
+            pending_suggestion = max(
+                (s for s in suggestions if s.status is SuggestionStatus.PRESENTED),
+                key=lambda s: s.generated_at,
+                default=None,
+            )
+            if pending_suggestion is None:
+                payload = {
+                    "type": "done",
+                    "request_id": request_id,
+                    "approved": False,
+                    "status": "no_pending_authorization",
+                    "message": (
+                        "No pending authorization or presented suggestion found "
+                        "for this request. The flow may have already proceeded, "
+                        "or no suggestion was generated yet."
+                    ),
+                    "flow_url": f"/requests/{request_id}/flow",
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+                return
+
+            settings = _settings_override(body.database_url)
+            url = settings.database.sqlalchemy_url
+            async for event in run_task_workflow_stage_stream(
+                task_id=request_id,
+                dependencies=build_local_flow_dependencies_from_settings(settings),
+                storage_label=url,
+                model=body.model or settings.ai_provider.model or "local-task-stage",
+                context_paths=tuple(body.context_paths),
+                documentation_path=body.documentation_path,
+                test_args=tuple(body.test_args),
+                provider_target=body.provider_target,
+                approve_stage=True,
+                requester=body.decided_by,
+                decider=body.decided_by,
+            ):
+                yield _serialize_orchestration_stream_event(event, request_id=request_id)
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    @app.post(
         "/requests/{request_id}/advance",
         tags=["requests"],
         summary="Advance a request to the next workflow stage",
@@ -2749,6 +2853,33 @@ def _serialize_execution_stream_chunk(chunk: AIProviderStreamChunk) -> str:
     """
 
     payload: dict[str, Any] = {"type": "delta", "content": chunk.delta, "finished": chunk.finished}
+    return f"data: {json.dumps(payload)}\n\n"
+
+
+def _serialize_orchestration_stream_event(
+    event: OrchestrationStreamEvent, *, request_id: str
+) -> str:
+    """Format one `OrchestrationStreamEvent` as an SSE `data:` line.
+
+    A `delta` event carries one incremental chunk of AI provider output;
+    the final `done` event carries the same payload shape
+    `POST /requests/{request_id}/approve` already returns (`approved`
+    derived from `blocked_reason`, the flattened result fields, and
+    `flow_url`), so a client can switch from the non-streaming to the
+    streaming endpoint without reshaping how it reads the final result.
+    """
+
+    if event.type == "delta":
+        payload: dict[str, Any] = {"type": "delta", "content": event.delta, "finished": event.finished}
+        return f"data: {json.dumps(payload)}\n\n"
+    result = event.result.as_dict() if event.result is not None else {}
+    payload = {
+        "type": "done",
+        "request_id": request_id,
+        "approved": not result.get("blocked_reason"),
+        **result,
+        "flow_url": f"/requests/{request_id}/flow",
+    }
     return f"data: {json.dumps(payload)}\n\n"
 
 
