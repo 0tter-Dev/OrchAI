@@ -142,7 +142,7 @@ The Studio module and the multi-user/per-user authorization revisit
 are explicitly deferred and not part of this workstream --- see the
 Cross-Cutting Rules below for the latter's prerequisite.
 
-The remaining workstream below (steps 1-3) closes a gap in OrchAI's
+The remaining workstream below (steps 1-2) closes a gap in OrchAI's
 own usability: the project already models a generic "lifecycle
 script" concept for the projects *it* orchestrates
 (`docs/context/project-adapter-and-security.md`'s readiness gates,
@@ -160,46 +160,19 @@ future step here should re-read its current files rather than assume
 the shape described below stays fixed. A Desktop UX revalidation pass
 against the Codex/Claude Code
 comparison in `docs/ARCHITECTURAL-CONTRACT.md` §7 is intentionally left
-as a future mention only (not a numbered step yet) until steps 1-3
+as a future mention only (not a numbered step yet) until steps 1-2
 land --- manual UI/UX testing is expected to be materially easier once
 a single `orchai.bat` can start/stop/restart the Desktop shell on
-demand.
+demand. `v0.4.1` completed the first step of this workstream:
+`tools/windows/orchai-setup.bat`, adapted from OrchFlow's
+`tools/windows/orchflow-setup.bat`, verifies Python 3.14+/`uv` (plus
+Node.js only in `desktop` mode), prepares `.env` from `.env.example`,
+runs `uv sync --dev` (and the frontend build only in `desktop` mode),
+runs `uv run orchai db sync`, and validates the CLI --- both
+interactively and via `orchai-setup.bat check [headless|desktop]`,
+the latter reusable by the next two steps below.
 
-1. `feat(bootstrap): add tools/windows/orchai-setup.bat for environment and dependency checks`
-
-   Objective: give OrchAI a first-run entrypoint that verifies
-   prerequisites and prepares the local environment for itself, the
-   same convenience OrchFlow already provides for its own repository.
-
-   Main scope: add `tools/windows/orchai-setup.bat`, adapted from
-   OrchFlow's `tools/windows/orchflow-setup.bat`, with a non-
-   interactive `check` argument (reusable by step 2's root launcher
-   and step 3's bootstrap executable) plus an interactive first-run
-   menu; verify Python 3.14 and `uv` are on `PATH`, confirm `.env`
-   exists (copying from the already-committed `.env.example` when
-   missing --- no new template needed), run `uv sync`, run
-   `uv run orchai db sync`, and validate the CLI
-   (`uv run orchai --help`). Node.js is checked and
-   `apps/desktop/frontend` built (`npm install && npm run build`,
-   producing the gitignored `dist/` the Desktop shell mounts as static
-   files) only when setup targets Desktop mode --- headless-API-only
-   setup must not require Node.js at all. Report a missing
-   prerequisite with a short, actionable message instead of a raw tool
-   error, and never install global software silently.
-
-   Likely documents to update: `tools/windows/orchai-setup.bat` (new),
-   `README.md`, `docs/USER-GUIDE.md`, `docs/OPERATIONS-REFERENCE.md`.
-
-   Expected validation: manual run on a clean checkout confirming each
-   check step reports pass/fail correctly, including at least one
-   deliberately-missing-prerequisite case; `uv run ruff check` and
-   `uv run pytest` unaffected (no Python source changes).
-
-   Planned semantic decision: patch bump from `0.4.0` to `0.4.1` --- a
-   contained setup-tooling addition, no public contract or documented
-   behavior change.
-
-2. `feat(bootstrap): add orchai-control.bat and a root orchai.bat launcher`
+1. `feat(bootstrap): add orchai-control.bat and a root orchai.bat launcher`
 
    Objective: give OrchAI routine local lifecycle control (status/
    start/stop/restart) and a single, friendly root entrypoint, letting
@@ -234,12 +207,13 @@ demand.
    Planned semantic decision: patch bump from `0.4.1` to `0.4.2` ---
    routine local tooling, no public API/CLI contract change.
 
-3. `feat(installer): add a Windows bootstrap executable wrapping orchai.bat`
+2. `feat(installer): add a Windows bootstrap executable wrapping orchai.bat`
 
    Objective: let a user who is not comfortable choosing scripts
    manually get from a downloaded or cloned repository to a running
    OrchAI with one double-click, without introducing a second, hidden
-   orchestration layer alongside the `.bat` launchers from steps 1-2.
+   orchestration layer alongside `orchai-setup.bat` and step 1's
+   `orchai.bat`/`orchai-control.bat`.
 
    Main scope: reuse OrchFlow's own bootstrap prototype
    (`tools/windows/bootstrap/OrchFlow.Bootstrap.csproj` +
@@ -254,7 +228,7 @@ demand.
    current directory looking for `orchai.bat`, validates `orchai.bat`/
    `orchai-setup.bat`/`orchai-control.bat` exist, checks local
    prerequisites (`uv` always; `node` only when the resolved start
-   mode is Desktop, per step 1's Node.js scoping), then runs
+   mode is Desktop, per `orchai-setup.bat`'s Node.js scoping), then runs
    `orchai-setup.bat check` → `orchai-control.bat start` →
    `orchai-control.bat status`, opening the local API URL in a browser
    (read from `.env`/`ORCHAI_API_HOST`/`ORCHAI_API_PORT`, mirroring how
@@ -272,7 +246,7 @@ demand.
    already produces the Desktop application's own executable; this
    bootstrap is the first-run onboarding layer in front of the whole
    repository (setup plus choice of mode), not a repackaging of the
-   Desktop shell itself. As with step 1-2's OrchFlow-mirroring, re-read
+   Desktop shell itself. As with step 1's OrchFlow-mirroring, re-read
    OrchFlow's current prototype files rather than assuming this
    description stays accurate --- that project's bootstrap is itself
    still a first prototype and may keep changing.

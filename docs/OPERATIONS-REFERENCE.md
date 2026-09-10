@@ -326,6 +326,34 @@ no streaming counterpart, and `POST /executions/{execution_id}/run-stream`
 is API-only, mirroring how conversation streaming also has no CLI
 command.
 
+## Windows Local Setup
+
+`tools\windows\orchai-setup.bat` is a first-run-friendly launcher for
+a Windows checkout, adapted from the sibling project OrchFlow's own
+`tools/windows/orchflow-setup.bat`. Run it with no arguments for an
+interactive menu (`[1]` check for headless API use, `[2]` check for
+Desktop use, `[0]` exit), or drive it non-interactively:
+
+```bat
+tools\windows\orchai-setup.bat check
+tools\windows\orchai-setup.bat check desktop
+```
+
+The check flow verifies Python 3.14+ and `uv` are on `PATH` (plus
+Node.js when the target mode is `desktop`), creates `.env` from the
+committed `.env.example` only when `.env` does not already exist
+(never overwriting one that does), runs `uv sync --dev`, builds
+`apps/desktop/frontend` with `npm install`/`npm run build` only in
+`desktop` mode (headless-API-only setup never requires Node.js), runs
+`uv run orchai db sync`, and validates the CLI with
+`uv run orchai --help`. A missing prerequisite is reported with a
+short, actionable install pointer instead of a raw tool error, and the
+script never installs global software on its own — only project-local
+dependencies (`uv sync`, `npm install`). `check`'s target-mode argument
+exists so a future root launcher and bootstrap executable (tracked as
+the next `docs/TO-DO.md` steps) can drive the same check for whichever
+mode the user chooses to start.
+
 ## Troubleshooting
 
 ### `runtime check` warns about local-only mode
