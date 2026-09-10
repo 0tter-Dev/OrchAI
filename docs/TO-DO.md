@@ -142,11 +142,11 @@ The Studio module and the multi-user/per-user authorization revisit
 are explicitly deferred and not part of this workstream --- see the
 Cross-Cutting Rules below for the latter's prerequisite.
 
-The remaining workstream below (steps 1-2) closes a gap in OrchAI's
-own usability: the project already models a generic "lifecycle
-script" concept for the projects *it* orchestrates
+The remaining workstream below closes a gap in OrchAI's own
+usability: the project already models a generic "lifecycle script"
+concept for the projects *it* orchestrates
 (`docs/context/project-adapter-and-security.md`'s readiness gates,
-`STATUS`/`START`/`STOP`/`RESTART`), but offers nothing equivalent for
+`STATUS`/`START`/`STOP`/`RESTART`), but offered nothing equivalent for
 itself. It mirrors the sibling project OrchFlow's own Windows launcher
 model (`orchflow.bat` plus `tools/windows/orchflow-setup.bat` and
 `orchflow-control.bat`) and its now-prototyped
@@ -158,62 +158,36 @@ root `.bat` and its bootstrap moved from planning to a built .NET
 prototype since this workstream was first discussed here), so any
 future step here should re-read its current files rather than assume
 the shape described below stays fixed. A Desktop UX revalidation pass
-against the Codex/Claude Code
-comparison in `docs/ARCHITECTURAL-CONTRACT.md` §7 is intentionally left
-as a future mention only (not a numbered step yet) until steps 1-2
-land --- manual UI/UX testing is expected to be materially easier once
-a single `orchai.bat` can start/stop/restart the Desktop shell on
-demand. `v0.4.1` completed the first step of this workstream:
-`tools/windows/orchai-setup.bat`, adapted from OrchFlow's
-`tools/windows/orchflow-setup.bat`, verifies Python 3.14+/`uv` (plus
-Node.js only in `desktop` mode), prepares `.env` from `.env.example`,
-runs `uv sync --dev` (and the frontend build only in `desktop` mode),
-runs `uv run orchai db sync`, and validates the CLI --- both
-interactively and via `orchai-setup.bat check [headless|desktop]`,
-the latter reusable by the next two steps below.
+against the Codex/Claude Code comparison in
+`docs/ARCHITECTURAL-CONTRACT.md` §7 is intentionally left as a future
+mention only (not a numbered step yet) until step 1 lands. `v0.4.1`
+added `tools/windows/orchai-setup.bat` (environment/dependency check,
+both interactively and via `orchai-setup.bat check [headless|desktop]`).
+`v0.4.2` completed the rest of this workstream's local-tooling half:
+`tools/windows/orchai-control.bat` (wrapping
+`scripts/orchai-local-process-control.ps1`) gives routine
+status/start/stop/restart lifecycle control, tracking exactly one
+local process at a time -- either the headless API (readiness detected
+by polling `ORCHAI_API_HOST`/`ORCHAI_API_PORT` for a listening socket,
+mirroring OrchFlow's own API/Web tracking) or the Desktop shell
+(tracked by pid directly, since the Desktop shell binds a free port at
+runtime with nothing fixed to poll for) -- and a root `orchai.bat`
+ties `orchai-setup.bat check` and `orchai-control.bat start` together
+as the documented one-command startup path. Manual testing during
+implementation caught and fixed a real bug: launching the Desktop
+shell through a `Hidden`-style wrapper window broke WebView2's
+COM-threading initialization (confirmed by comparing against a direct,
+non-wrapped launch); the launcher now uses a `Normal` window style for
+that specific launch. Only the double-click bootstrap executable
+(below) remains.
 
-1. `feat(bootstrap): add orchai-control.bat and a root orchai.bat launcher`
-
-   Objective: give OrchAI routine local lifecycle control (status/
-   start/stop/restart) and a single, friendly root entrypoint, letting
-   the user choose between the headless API and the Desktop shell at
-   start time --- the one genuinely OrchAI-specific branch OrchFlow's
-   single-mode (API+web) launcher does not need.
-
-   Main scope: add `tools/windows/orchai-control.bat` (interactive
-   menu plus `status`/`start`/`stop`/`restart` arguments), adapted from
-   OrchFlow's `tools/windows/orchflow-control.bat`, wrapping a new
-   PowerShell process-control script that tracks the running process
-   via a PID file and process metadata under a local runtime
-   directory (mirroring `orchflow-local-process-control.ps1`'s model);
-   `start` accepts or prompts for headless API
-   (`uv run orchai api serve`) vs. Desktop shell
-   (`uv run --extra desktop python -m apps.desktop.shell.main`). Add a
-   root `orchai.bat`, adapted from `orchflow.bat`, tying
-   `orchai-setup.bat check` and `orchai-control.bat start` together as
-   the documented one-command startup path (checks-and-start / open
-   browser-or-window / setup menu / control menu / exit).
-
-   Likely documents to update: `tools/windows/orchai-control.bat`
-   (new), `scripts/orchai-local-process-control.ps1` (new), `orchai.bat`
-   (new, repository root), `README.md`, `docs/USER-GUIDE.md`,
-   `docs/OPERATIONS-REFERENCE.md`.
-
-   Expected validation: manual verification of status/start/stop/
-   restart for both start modes (API-only and Desktop), confirming PID
-   tracking survives a restart and reports a clear status when nothing
-   is running; `uv run ruff check` and `uv run pytest` unaffected.
-
-   Planned semantic decision: patch bump from `0.4.1` to `0.4.2` ---
-   routine local tooling, no public API/CLI contract change.
-
-2. `feat(installer): add a Windows bootstrap executable wrapping orchai.bat`
+1. `feat(installer): add a Windows bootstrap executable wrapping orchai.bat`
 
    Objective: let a user who is not comfortable choosing scripts
    manually get from a downloaded or cloned repository to a running
    OrchAI with one double-click, without introducing a second, hidden
-   orchestration layer alongside `orchai-setup.bat` and step 1's
-   `orchai.bat`/`orchai-control.bat`.
+   orchestration layer alongside `orchai-setup.bat`/`orchai.bat`/
+   `orchai-control.bat`.
 
    Main scope: reuse OrchFlow's own bootstrap prototype
    (`tools/windows/bootstrap/OrchFlow.Bootstrap.csproj` +
@@ -246,8 +220,8 @@ the latter reusable by the next two steps below.
    already produces the Desktop application's own executable; this
    bootstrap is the first-run onboarding layer in front of the whole
    repository (setup plus choice of mode), not a repackaging of the
-   Desktop shell itself. As with step 1's OrchFlow-mirroring, re-read
-   OrchFlow's current prototype files rather than assuming this
+   Desktop shell itself. As with the earlier steps' OrchFlow-mirroring,
+   re-read OrchFlow's current prototype files rather than assuming this
    description stays accurate --- that project's bootstrap is itself
    still a first prototype and may keep changing.
 

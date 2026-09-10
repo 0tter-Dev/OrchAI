@@ -326,13 +326,22 @@ no streaming counterpart, and `POST /executions/{execution_id}/run-stream`
 is API-only, mirroring how conversation streaming also has no CLI
 command.
 
-## Windows Local Setup
+## Windows Local Setup And Control
 
-`tools\windows\orchai-setup.bat` is a first-run-friendly launcher for
-a Windows checkout, adapted from the sibling project OrchFlow's own
-`tools/windows/orchflow-setup.bat`. Run it with no arguments for an
-interactive menu (`[1]` check for headless API use, `[2]` check for
-Desktop use, `[0]` exit), or drive it non-interactively:
+`orchai.bat` (repository root) is the recommended entrypoint for
+first-time Windows setup or day-to-day local startup: `[1]`/`[2]` run
+checks then start (headless API / Desktop), `[3]` opens the API docs
+in a browser, `[4]`/`[5]` open the Setup/Control menus, `[0]` exits.
+It delegates to two auxiliary launchers under `tools\windows\`, both
+adapted from the sibling project OrchFlow's own launcher model
+(`orchflow-setup.bat`/`orchflow-control.bat`), extended for OrchAI's
+headless-API-vs-Desktop choice (OrchFlow only has one deployment
+mode).
+
+`tools\windows\orchai-setup.bat` is the environment/dependency check.
+Run it with no arguments for an interactive menu (`[1]` check for
+headless API use, `[2]` check for Desktop use, `[0]` exit), or drive
+it non-interactively:
 
 ```bat
 tools\windows\orchai-setup.bat check
@@ -349,10 +358,39 @@ committed `.env.example` only when `.env` does not already exist
 `uv run orchai --help`. A missing prerequisite is reported with a
 short, actionable install pointer instead of a raw tool error, and the
 script never installs global software on its own — only project-local
-dependencies (`uv sync`, `npm install`). `check`'s target-mode argument
-exists so a future root launcher and bootstrap executable (tracked as
-the next `docs/TO-DO.md` steps) can drive the same check for whichever
-mode the user chooses to start.
+dependencies (`uv sync`, `npm install`).
+
+`tools\windows\orchai-control.bat` is routine local lifecycle control,
+wrapping `scripts\orchai-local-process-control.ps1`. Run it with no
+arguments for an interactive menu (`[1]` status, `[2]` start headless
+API, `[3]` start Desktop, `[4]` stop, `[5]` restart in the
+previously-started mode, `[0]` exit), or drive it non-interactively:
+
+```bat
+tools\windows\orchai-control.bat status
+tools\windows\orchai-control.bat start api
+tools\windows\orchai-control.bat start desktop
+tools\windows\orchai-control.bat stop
+tools\windows\orchai-control.bat restart
+tools\windows\orchai-control.bat restart api
+```
+
+Unlike OrchFlow (which always tracks a fixed API+Web pair), OrchAI
+tracks exactly one local process at a time -- either the headless API
+(`uv run orchai api serve`, readiness detected by polling
+`ORCHAI_API_HOST`/`ORCHAI_API_PORT` for a listening socket, same as
+OrchFlow's own API/Web tracking) or the Desktop shell
+(`uv run --extra desktop python -m apps.desktop.shell.main`, tracked
+by pid directly, since `server_runner.py` binds a free port at runtime
+with nothing fixed to poll for). `start`/`restart` without an explicit
+mode either requires one (`start`) or reuses the mode recorded from
+the last tracked start (`restart`). State (a PID file, JSON process
+metadata, a generated service command, and a startup log) lives under
+`ORCHAI_RUNTIME_DIR` (default `runtime\`, gitignored, resolved
+relative to the repository root); `stop`/`restart` only ever act on a
+process this control script itself started and can still verify by
+pid + start time + process name, refusing to touch an unmanaged
+process holding the configured API port.
 
 ## Troubleshooting
 
