@@ -91,9 +91,10 @@ calling convention (see `Technology And Test Strategy`); it replaced
 two earlier hand-rolled, single-provider adapters.
 
 `execute_stream()` extends the same port with an `AsyncIterator` of
-`AIProviderStreamChunk` (`delta`, `finished`, `finish_reason`, and
-token counts on the final chunk) for incremental output — additive,
-not a replacement: `execute()` remains what `AUTOMATIC`-mode,
+`AIProviderStreamChunk` (`delta`, `finished`, `provider_name`,
+`finish_reason`, and token counts, arriving across chunks rather than
+only on the final one) for incremental output — additive, not a
+replacement: `execute()` remains what `AUTOMATIC`-mode,
 non-interactive, and CLI callers use when only the final result
 matters, and `Execution`'s state machine still records exactly one
 atomic terminal result regardless of whether it was produced by a
@@ -102,13 +103,22 @@ Server-Sent Events, not a WebSocket, since the flow is strictly
 server-to-client. Cost estimation is skipped for streamed replies
 (`resource_usage.estimated_cost` is always `None`), since computing it
 accurately would require reassembling the full response from every
-chunk first. `execute_stream()` is implemented and unit-tested; the
-non-streaming `AIProviderPort.execute()` path is what `/requests`
-currently drives (see `Chat-First And Interfaces`) — a Task-bounded
-caller for `execute_stream()` is not wired yet, unlike the
-already-wired streaming used by non-escalated conversation messages
+chunk first. `execute_stream()` is implemented and unit-tested, and
+`ExecutionEngine.run_stream()` is its Task-bounded caller: it drives
+`execute_stream()`, yields each chunk onward, and reassembles the
+accumulated deltas and token counts into the same
+`AIProviderExecutionResult` shape `ExecutionEngine.run()` produces, so
+completion/event/audit recording needs no branching by
+streamed-vs-not. `run_stream()` has no external caller yet, though —
+the non-streaming `AIProviderPort.execute()` path (via `run()`) is
+still what `/requests` currently drives end to end (see `Chat-First
+And Interfaces`); exposing `run_stream()` through the API (Server-Sent
+Events) and the Desktop Approval Card are tracked as the next steps in
+`docs/TO-DO.md`. This differs from the already fully-wired streaming
+used by non-escalated conversation messages
 (`ConversationAIProviderPort.complete_stream()`, see `Chat-First And
-Interfaces`'s Conversations section).
+Interfaces`'s Conversations section), which already has an external,
+SSE-reachable caller.
 
 ## Key Rules
 
