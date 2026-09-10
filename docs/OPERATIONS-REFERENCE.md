@@ -219,7 +219,8 @@ services and orchestration flow.
 
 **Executions**: `POST /executions/request`,
 `POST /executions/{execution_id}/dispatch`,
-`POST /executions/{execution_id}/run`, `GET /executions`,
+`POST /executions/{execution_id}/run`,
+`POST /executions/{execution_id}/run-stream`, `GET /executions`,
 `GET /executions/{execution_id}`,
 `POST /executions/{execution_id}/transition`,
 `POST /executions/{execution_id}/complete`,
@@ -248,7 +249,13 @@ and lets the client follow persisted state through
 `GET /executions/{id}`, `GET /events`, `GET /audit`, and
 `GET /metrics`. `POST /executions/{execution_id}/run` is the direct,
 synchronous bridge to the configured provider when the caller wants to
-wait for the result inline.
+wait for the result inline. `POST /executions/{execution_id}/run-stream`
+is the incremental variant of that same direct call: it requires the
+execution to already be `AUTHORIZED` (`404`/`409` otherwise) and
+returns a `text/event-stream` response — one `type: "delta"` event per
+provider chunk, then a final `type: "done"` event carrying the fully
+serialized terminal execution, mirroring
+`POST /conversations/{id}/messages`'s streaming shape.
 
 ## CLI Reference
 
@@ -305,7 +312,11 @@ service, and follow persisted state through `GET /executions/{id}`,
 `GET /events`, `GET /audit`, and `GET /metrics`. The CLI also exposes
 `orchai executions dispatch`, but because the CLI is a one-shot
 process it uses a synchronous fallback so the command completes
-reliably — the API remains the primary async surface.
+reliably — the API remains the primary async surface. The same
+one-shot constraint applies to streaming: `orchai executions run` has
+no streaming counterpart, and `POST /executions/{execution_id}/run-stream`
+is API-only, mirroring how conversation streaming also has no CLI
+command.
 
 ## Troubleshooting
 

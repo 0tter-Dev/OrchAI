@@ -29,6 +29,7 @@ from orchai.application.executions import (
     RequestExecutionCommand,
     TransitionExecutionCommand,
 )
+from orchai.application.executions.ports import AIProviderStreamChunk
 from orchai.application.identity import (
     AccessTokenClaims,
     AuthenticationResult,
@@ -679,7 +680,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="OrchAI API",
-        version="0.2.10",
+        version="0.3.0",
         summary="OrchAI orchestration API — chat-first request interface and operational surface.",
         description=(
             "API-first interface for OrchAI orchestration. "
@@ -695,7 +696,7 @@ def create_app() -> FastAPI:
     async def root() -> dict[str, Any]:
         return {
             "service": "OrchAI API",
-            "version": "0.2.10",
+            "version": "0.3.0",
             "docs_url": str(app.docs_url),
             "redoc_url": str(app.redoc_url),
             "openapi_url": str(app.openapi_url),
@@ -734,7 +735,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["system"], summary="Check basic service health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "version": "0.2.10"}
+        return {"status": "ok", "version": "0.3.0"}
 
     @app.post(
         "/auth/login",
@@ -1737,6 +1738,54 @@ def create_app() -> FastAPI:
         return _serialize_execution(execution)
 
     @app.post(
+        "/executions/{execution_id}/run-stream",
+        summary="Run one authorized execution and stream provider output (SSE)",
+        dependencies=[Depends(require_permission("executions:manage"))],
+    )
+    async def run_execution_stream(
+        execution_id: str,
+        database_url: str | None = None,
+    ) -> StreamingResponse:
+        runtime = build_sqlalchemy_runtime(_database_url(database_url))
+
+        # Validated eagerly, before the streaming response starts, so an
+        # unknown or not-yet-authorized execution still gets a real error
+        # status -- once the SSE body begins, the HTTP status line has
+        # already been sent and any further error can only be signaled
+        # in-band, the same tradeoff send_conversation_message_route makes.
+        try:
+            execution = await runtime.execution_service.get_execution(
+                ExecutionId(execution_id)
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"unknown execution: {execution_id!r}"
+            ) from exc
+        if execution.state is not ExecutionState.AUTHORIZED:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "execution must be AUTHORIZED before provider dispatch, "
+                    f"got {execution.state.value!r}"
+                ),
+            )
+        await _ensure_project_adapter_registered_for_execution(
+            runtime=runtime,
+            execution_id=ExecutionId(execution_id),
+        )
+
+        async def event_stream() -> AsyncIterator[str]:
+            async for chunk in runtime.execution_engine.run_stream(ExecutionId(execution_id)):
+                yield _serialize_execution_stream_chunk(chunk)
+            final_execution = await runtime.execution_service.get_execution(
+                ExecutionId(execution_id)
+            )
+            payload = {"type": "done", "execution": _serialize_execution(final_execution)}
+            yield f"data: {json.dumps(payload)}\n\n"
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    @app.post(
         "/executions/{execution_id}/dispatch",
         dependencies=[Depends(require_permission("executions:manage"))],
     )
@@ -2686,6 +2735,20 @@ def _serialize_stream_event(event) -> str:
         payload["message"] = _serialize_message(event.message) if event.message else None
     if event.type == "error":
         payload["error"] = event.error
+    return f"data: {json.dumps(payload)}\n\n"
+
+
+def _serialize_execution_stream_chunk(chunk: AIProviderStreamChunk) -> str:
+    """Format one `AIProviderStreamChunk` as an SSE `data:` line.
+
+    The terminal `Execution` state is not carried on any chunk -- it is
+    sent as a separate `type: "done"` event once `run_stream()`'s
+    iterator is exhausted (see `run_execution_stream`), the same
+    delta-then-done shape `_serialize_stream_event` uses for
+    conversation streaming.
+    """
+
+    payload: dict[str, Any] = {"type": "delta", "content": chunk.delta, "finished": chunk.finished}
     return f"data: {json.dumps(payload)}\n\n"
 
 

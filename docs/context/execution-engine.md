@@ -109,16 +109,26 @@ chunk first. `execute_stream()` is implemented and unit-tested, and
 accumulated deltas and token counts into the same
 `AIProviderExecutionResult` shape `ExecutionEngine.run()` produces, so
 completion/event/audit recording needs no branching by
-streamed-vs-not. `run_stream()` has no external caller yet, though —
-the non-streaming `AIProviderPort.execute()` path (via `run()`) is
-still what `/requests` currently drives end to end (see `Chat-First
-And Interfaces`); exposing `run_stream()` through the API (Server-Sent
-Events) and the Desktop Approval Card are tracked as the next steps in
-`docs/TO-DO.md`. This differs from the already fully-wired streaming
-used by non-escalated conversation messages
+streamed-vs-not. `run_stream()` is now externally reachable through
+`POST /executions/{execution_id}/run-stream` (SSE) — a dedicated
+fine-grained operational endpoint alongside the existing non-streaming
+`POST /executions/{execution_id}/run`, not a change to `/requests`'s
+own advance flow (see `Chat-First And Interfaces`'s Request Lifecycle:
+`/requests/{id}/advance` still drives the multi-stage orchestrator
+through the non-streaming `execute()`/`run()` path end to end). Each
+SSE chunk event carries `type: "delta"`; once the stream ends, a final
+`type: "done"` event carries the fully serialized terminal `Execution`
+(state, result, resource usage), the same delta-then-done shape used
+by conversation streaming. The one-shot CLI process has no persistent
+connection to stream over, so `orchai executions run` intentionally
+stays on the non-streaming path — mirroring how conversation streaming
+has no CLI command either. The Desktop Approval Card consuming this
+endpoint is tracked as the next step in `docs/TO-DO.md`. This is now
+the same externally-reachable shape as the streaming already used by
+non-escalated conversation messages
 (`ConversationAIProviderPort.complete_stream()`, see `Chat-First And
-Interfaces`'s Conversations section), which already has an external,
-SSE-reachable caller.
+Interfaces`'s Conversations section) — both are SSE-reachable, just
+through different endpoints for their different bounded contexts.
 
 ## Key Rules
 
