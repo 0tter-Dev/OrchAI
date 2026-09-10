@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 
 from orchai.application.context import ContextService, ResolveExecutionContextCommand
 from orchai.application.executions.commands import (
@@ -18,6 +18,7 @@ from orchai.application.executions.ports import (
     AIProviderExecutionRequest,
     AIProviderExecutionResult,
     AIProviderPort,
+    AIProviderStreamChunk,
     ExecutionRepository,
 )
 from orchai.application.executions.service import ExecutionService
@@ -211,6 +212,152 @@ class ExecutionEngine:
             )
         except Exception as exc:
             return await self._fail_execution(
+                execution.id,
+                output="",
+                errors=(str(exc),),
+                metadata={
+                    **provider_trace,
+                    "error_type": exc.__class__.__name__,
+                    "error_boundary": "execution",
+                },
+            )
+
+    async def run_stream(
+        self, execution_id: ExecutionId
+    ) -> AsyncIterator[AIProviderStreamChunk]:
+        """Streaming counterpart of :meth:`run` (ADR-013, Phase 4 follow-up).
+
+        Mirrors `run()`'s state transitions and terminal completion
+        exactly, but calls `AIProviderPort.execute_stream()` and yields
+        each `AIProviderStreamChunk` to the caller as it arrives. The
+        accumulated deltas are reassembled into the same
+        `AIProviderExecutionResult` shape `run()` produces once the
+        stream ends, so completion/event/audit recording is identical
+        either way -- `Execution` still records exactly one atomic
+        terminal result, streamed or not. Async generators cannot return
+        a value, so the terminal `Execution` is available to the caller
+        only by re-fetching it (e.g. via `ExecutionRepository.get()`)
+        once the stream is exhausted.
+        """
+
+        execution = await self._execution_repository.get(execution_id)
+        if execution.state is not ExecutionState.AUTHORIZED:
+            raise ValueError("execution must be AUTHORIZED before provider dispatch")
+
+        provider_trace: dict[str, str] = {}
+        try:
+            execution = await self._execution_service.transition_execution(
+                TransitionExecutionCommand(
+                    execution_id=execution.id,
+                    target_state=ExecutionState.PREPARING,
+                )
+            )
+            package = await self._context_service.resolve_execution_context(
+                ResolveExecutionContextCommand(execution_id=execution.id)
+            )
+            execution = await self._execution_service.transition_execution(
+                TransitionExecutionCommand(
+                    execution_id=execution.id,
+                    target_state=ExecutionState.STARTED,
+                )
+            )
+            execution = await self._execution_service.transition_execution(
+                TransitionExecutionCommand(
+                    execution_id=execution.id,
+                    target_state=ExecutionState.RUNNING,
+                )
+            )
+            request = AIProviderExecutionRequest(
+                execution_id=execution.id,
+                task_id=execution.task_id,
+                role=execution.role,
+                action=execution.action,
+                model_id=execution.model_id,
+                project_id=execution.project_id,
+                context=tuple(
+                    AIProviderContextItem(
+                        resource=item.reference.resource,
+                        content=item.content,
+                        source=item.reference.source.value,
+                        metadata=item.metadata,
+                    )
+                    for item in package.items
+                ),
+                metadata={"context_provided_at": package.provided_at.isoformat()},
+            )
+            provider_trace = {
+                "shared_context_resources": ",".join(
+                    item.resource for item in request.context
+                ),
+                "shared_context_sources": ",".join(item.source for item in request.context),
+                "provider_context_count": str(len(request.context)),
+            }
+            await self._ai_provider.validate_request(request)
+
+            accumulated: list[str] = []
+            provider_name = ""
+            input_tokens: int | None = None
+            output_tokens: int | None = None
+            async for chunk in self._ai_provider.execute_stream(request):
+                provider_name = chunk.provider_name or provider_name
+                input_tokens = (
+                    chunk.input_tokens if chunk.input_tokens is not None else input_tokens
+                )
+                output_tokens = (
+                    chunk.output_tokens if chunk.output_tokens is not None else output_tokens
+                )
+                if chunk.delta:
+                    accumulated.append(chunk.delta)
+                yield chunk
+
+            result = _validated_provider_result(
+                AIProviderExecutionResult(
+                    output="".join(accumulated),
+                    provider_name=provider_name,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                ),
+                execution=execution,
+            )
+            await self._execution_service.complete_execution(
+                CompleteExecutionCommand(
+                    execution_id=execution.id,
+                    output=result.output,
+                    success=True,
+                    warnings=result.warnings,
+                    resource_usage=ResourceUsage(
+                        input_tokens=result.input_tokens,
+                        output_tokens=result.output_tokens,
+                        estimated_cost=result.estimated_cost,
+                        metadata=result.metadata,
+                    ),
+                    metadata={**provider_trace, **dict(result.metadata)},
+                )
+            )
+        except AIProviderError as exc:
+            await self._fail_execution(
+                execution.id,
+                output="",
+                errors=(str(exc),),
+                metadata={
+                    **provider_trace,
+                    "error_type": exc.__class__.__name__,
+                    "error_boundary": "provider",
+                },
+            )
+        except (ContextError, ProjectAdapterError) as exc:
+            await self._fail_execution(
+                execution.id,
+                output="",
+                errors=(str(exc),),
+                metadata={
+                    **provider_trace,
+                    "error_type": exc.__class__.__name__,
+                    "error_boundary": "context",
+                },
+            )
+        except Exception as exc:
+            await self._fail_execution(
                 execution.id,
                 output="",
                 errors=(str(exc),),

@@ -132,6 +132,7 @@ def test_litellm_provider_execute_stream_yields_deltas_then_a_finished_chunk(mon
 
     assert [c.delta for c in results] == ["hel", "lo", "", ""]
     assert [c.finished for c in results] == [False, False, True, False]
+    assert all(c.provider_name == "litellm" for c in results)
     assert results[-1].input_tokens == 4
     assert results[-1].output_tokens == 2
 

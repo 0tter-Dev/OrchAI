@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncIterator
 
 from orchai.application.authorization import (
     DecideAuthorizationCommand,
@@ -10,6 +11,7 @@ from orchai.application.executions.ports import (
     AIProviderExecutionRequest,
     AIProviderExecutionResult,
     AIProviderPort,
+    AIProviderStreamChunk,
     AIProviderValidationError,
 )
 from orchai.application.orchestration import RunLocalFlowCommand
@@ -467,6 +469,57 @@ def test_execution_engine_cancel_swallows_a_provider_cancel_error(tmp_path) -> N
     asyncio.run(run())
 
 
+def test_execution_engine_run_stream_accumulates_deltas_into_one_completed_execution(
+    tmp_path,
+) -> None:
+    """`run_stream()` must yield every provider chunk as it arrives, then
+    reassemble the accumulated deltas into the same terminal
+    `Execution` shape `run()` produces -- exactly one COMPLETED state,
+    not a partial or duplicated one.
+    """
+
+    async def run() -> None:
+        provider = StreamingProvider(("Hel", "lo", ", ", "world."))
+        runtime = build_in_memory_runtime(ai_provider=provider)
+        execution = await _authorized_execution(runtime, tmp_path)
+
+        chunks = [chunk async for chunk in runtime.execution_engine.run_stream(execution.id)]
+
+        assert [chunk.delta for chunk in chunks] == ["Hel", "lo", ", ", "world.", ""]
+        assert chunks[-1].finished is True
+        persisted = await runtime.execution_service.get_execution(execution.id)
+        assert persisted.state is ExecutionState.COMPLETED
+        assert persisted.result is not None
+        assert persisted.result.output == "Hello, world."
+        assert persisted.result.resource_usage.input_tokens == 4
+        assert persisted.result.resource_usage.output_tokens == 6
+
+    asyncio.run(run())
+
+
+def test_execution_engine_run_stream_fails_the_execution_on_a_mid_stream_error(
+    tmp_path,
+) -> None:
+    """A provider error raised partway through the stream must still land
+    on exactly one terminal `Execution` state (FAILED), same as a
+    non-streaming provider failure in `run()`."""
+
+    async def run() -> None:
+        provider = MidStreamFailingProvider(("partial",))
+        runtime = build_in_memory_runtime(ai_provider=provider)
+        execution = await _authorized_execution(runtime, tmp_path)
+
+        chunks = [chunk async for chunk in runtime.execution_engine.run_stream(execution.id)]
+
+        assert [chunk.delta for chunk in chunks] == ["partial"]
+        persisted = await runtime.execution_service.get_execution(execution.id)
+        assert persisted.state is ExecutionState.FAILED
+        assert persisted.result is not None
+        assert persisted.result.errors == ("provider stream disconnected",)
+
+    asyncio.run(run())
+
+
 class SlowProvider(AIProviderPort):
     """Never completes on its own -- only cancellation ends it."""
 
@@ -564,6 +617,73 @@ class ValidationRejectingProvider(AIProviderPort):
         request: AIProviderExecutionRequest,
     ) -> AIProviderExecutionResult:
         raise AssertionError("provider should not execute after validation failure")
+
+    async def cancel(self, execution_id) -> None:
+        return None
+
+
+class StreamingProvider(AIProviderPort):
+    """Yields deltas then a token-carrying finished chunk, mirroring how
+    `LiteLLMProvider.execute_stream()` reports usage on a chunk separate
+    from the one that sets `finished=True`."""
+
+    def __init__(self, deltas: tuple[str, ...]) -> None:
+        self._deltas = deltas
+
+    async def capabilities(self) -> frozenset[str]:
+        return frozenset({"execute", "execute_stream", "validate_request"})
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        return None
+
+    async def execute(
+        self,
+        request: AIProviderExecutionRequest,
+    ) -> AIProviderExecutionResult:
+        raise AssertionError("run_stream should call execute_stream, not execute")
+
+    async def execute_stream(
+        self, request: AIProviderExecutionRequest
+    ) -> AsyncIterator[AIProviderStreamChunk]:
+        for delta in self._deltas:
+            yield AIProviderStreamChunk(delta=delta, provider_name="streaming-fake")
+        yield AIProviderStreamChunk(
+            delta="",
+            finished=True,
+            provider_name="streaming-fake",
+            finish_reason="stop",
+            input_tokens=4,
+            output_tokens=6,
+        )
+
+    async def cancel(self, execution_id) -> None:
+        return None
+
+
+class MidStreamFailingProvider(AIProviderPort):
+    """Yields a few deltas, then raises AIProviderError mid-stream."""
+
+    def __init__(self, deltas: tuple[str, ...]) -> None:
+        self._deltas = deltas
+
+    async def capabilities(self) -> frozenset[str]:
+        return frozenset({"execute", "execute_stream", "validate_request"})
+
+    async def validate_request(self, request: AIProviderExecutionRequest) -> None:
+        return None
+
+    async def execute(
+        self,
+        request: AIProviderExecutionRequest,
+    ) -> AIProviderExecutionResult:
+        raise AssertionError("run_stream should call execute_stream, not execute")
+
+    async def execute_stream(
+        self, request: AIProviderExecutionRequest
+    ) -> AsyncIterator[AIProviderStreamChunk]:
+        for delta in self._deltas:
+            yield AIProviderStreamChunk(delta=delta, provider_name="streaming-fake")
+        raise AIProviderError("provider stream disconnected")
 
     async def cancel(self, execution_id) -> None:
         return None

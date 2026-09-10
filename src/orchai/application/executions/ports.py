@@ -91,6 +91,7 @@ class AIProviderStreamChunk:
 
     delta: str
     finished: bool = False
+    provider_name: str = ""
     finish_reason: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
