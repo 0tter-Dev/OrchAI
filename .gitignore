@@ -23,6 +23,8 @@ build/
 dist/
 *.egg-info/
 node_modules/
+tools/windows/bootstrap/bin/
+tools/windows/bootstrap/obj/
 
 # Local runtime state
 .orchai/

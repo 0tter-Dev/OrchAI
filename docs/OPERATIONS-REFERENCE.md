@@ -392,6 +392,46 @@ process this control script itself started and can still verify by
 pid + start time + process name, refusing to touch an unmanaged
 process holding the configured API port.
 
+For a downloaded or cloned repository, a double-click bootstrap
+executable wraps the same three launchers, adapted from the sibling
+project OrchFlow's own bootstrap prototype
+(`tools/windows/bootstrap/OrchFlow.Bootstrap.csproj` + `Program.cs`,
+built via `tools/windows/build-bootstrap.bat`):
+
+```bat
+tools\windows\build-bootstrap.bat
+```
+
+The build outputs `dist\windows\orchai-bootstrap.exe` (a small .NET 9
+`net9.0-windows`, single-file, framework-dependent console project;
+the .NET SDK is required only to build it, never to run OrchAI
+itself, and the generated executable is a gitignored local build
+artifact, never committed). It resolves the repository root by
+walking up from its own directory or the current directory looking
+for `orchai.bat`, validates `orchai.bat`/`orchai-setup.bat`/
+`orchai-control.bat` exist, checks local prerequisites (`uv` always;
+`node` only when the resolved mode is `desktop`, mirroring
+`orchai-setup.bat`'s own Node.js scoping), then runs
+`orchai-setup.bat check <mode>` → `orchai-control.bat start <mode>` →
+`orchai-control.bat status`, opening the API docs in a browser (`api`
+mode) or leaving the Desktop window to open itself (`desktop` mode,
+the default). `--mode`'s two values (`api`/`desktop`, matching
+`orchai-control.bat`'s own vocabulary) are translated internally to
+`orchai-setup.bat check`'s `headless`/`desktop` vocabulary — the two
+scripts already shipped with those distinct terms (what to prepare the
+environment for vs. what process to actually run), so the bootstrap
+bridges them rather than introducing a third vocabulary. Full CLI
+surface: `--repo <path>`, `--mode api|desktop`, `--check-only`,
+`--status`, `--no-browser` (meaningful only in `api` mode),
+`--pause-on-exit`, `--help`. Explicitly out of scope, matching
+OrchFlow's own non-goals: installing global software, downloading
+Python/`uv`/Node/AI models, replacing `orchai.bat` as the documented
+startup contract, or bypassing `orchai-control.bat` for process
+ownership — this is the first-run onboarding layer in front of the
+whole repository (setup plus choice of mode), not a repackaging of the
+Desktop shell itself (that remains the separate PyInstaller packaging
+in `apps/desktop/shell/packaging/orchai_desktop.spec`).
+
 ## Troubleshooting
 
 ### `runtime check` warns about local-only mode

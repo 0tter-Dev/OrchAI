@@ -682,7 +682,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="OrchAI API",
-        version="0.4.2",
+        version="0.4.3",
         summary="OrchAI orchestration API — chat-first request interface and operational surface.",
         description=(
             "API-first interface for OrchAI orchestration. "
@@ -698,7 +698,7 @@ def create_app() -> FastAPI:
     async def root() -> dict[str, Any]:
         return {
             "service": "OrchAI API",
-            "version": "0.4.2",
+            "version": "0.4.3",
             "docs_url": str(app.docs_url),
             "redoc_url": str(app.redoc_url),
             "openapi_url": str(app.openapi_url),
@@ -737,7 +737,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["system"], summary="Check basic service health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "version": "0.4.2"}
+        return {"status": "ok", "version": "0.4.3"}
 
     @app.post(
         "/auth/login",
