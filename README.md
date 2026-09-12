@@ -10,7 +10,7 @@ business logic in the core.
 
 ## Current Status
 
-Version: `v0.4.2`
+Version: `v0.4.3`
 
 The current implementation is an executable foundation, not a complete
 product.
@@ -126,9 +126,34 @@ tools\windows\orchai-control.bat stop
 tools\windows\orchai-control.bat restart
 ```
 
-A Windows bootstrap executable wrapping `orchai.bat` for a
-double-click first-run experience is tracked as the next
-`docs/TO-DO.md` step.
+For a downloaded or cloned repository, a Windows bootstrap executable
+gives a double-click first-run experience without introducing a
+second, hidden orchestration layer alongside the `.bat` launchers
+above:
+
+```bat
+tools\windows\build-bootstrap.bat
+```
+
+The build outputs `dist\windows\orchai-bootstrap.exe` (a small .NET 9
+single-file console app; the .NET SDK is required only to build it,
+never to run OrchAI itself). It resolves the repository root by
+walking up from its own directory or the current directory looking
+for `orchai.bat`, validates the three launchers above exist, checks
+local prerequisites (`uv` always; `node` only when `--mode desktop`,
+the default), then runs `orchai-setup.bat check` → `orchai-control.bat
+start` → `orchai-control.bat status`, opening the API docs in a
+browser (`--mode api`) or leaving the Desktop window to open itself
+(`--mode desktop`). CLI surface: `--repo <path>`, `--mode api|desktop`,
+`--check-only`, `--status`, `--no-browser` (api mode only),
+`--pause-on-exit`, `--help`. It never installs global software,
+downloads Python/`uv`/Node/AI models, replaces `orchai.bat` as the
+documented startup contract, or bypasses `orchai-control.bat` for
+process ownership — it is the first-run onboarding layer in front of
+the whole repository, not a repackaging of the Desktop shell itself
+(that remains the separate PyInstaller packaging in
+`apps/desktop/shell/packaging/`). The generated executable is a local
+build artifact and is not committed to the repository.
 
 ## Configuration
 

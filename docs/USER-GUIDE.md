@@ -29,7 +29,10 @@ uv sync
 
 On Windows, `orchai.bat` (repository root) runs this same step (plus
 `.env` preparation, `db sync`, a CLI check, and starting OrchAI) as
-one guided, first-run-friendly launcher — see
+one guided, first-run-friendly launcher; a double-click bootstrap
+executable (`tools\windows\build-bootstrap.bat` builds
+`dist\windows\orchai-bootstrap.exe`) wraps that same launcher for a
+user who would rather not run scripts by hand — see
 [`OPERATIONS-REFERENCE.md`](OPERATIONS-REFERENCE.md)'s Windows Local
 Setup And Control section.
 
