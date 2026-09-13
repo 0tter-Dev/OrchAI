@@ -27,12 +27,13 @@ executes against the project.
 uv sync
 ```
 
-On Windows, `orchai.bat` (repository root) runs this same step (plus
-`.env` preparation, `db sync`, a CLI check, and starting OrchAI) as
-one guided, first-run-friendly launcher; a double-click bootstrap
-executable (`tools\windows\build-bootstrap.bat` builds
-`dist\windows\orchai-bootstrap.exe`) wraps that same launcher for a
-user who would rather not run scripts by hand — see
+On Windows, the recommended path is a double-click bootstrap
+executable: `tools\windows\build-bootstrap.bat` builds `OrchAI.exe` at
+the repository root once, and from then on double-clicking it checks
+prerequisites, prepares `.env`, syncs dependencies, and starts OrchAI
+Desktop directly — no scripts to run by hand. The
+`.bat` launchers it wraps (starting with `orchai.bat` at the
+repository root) remain available for manual or advanced control — see
 [`OPERATIONS-REFERENCE.md`](OPERATIONS-REFERENCE.md)'s Windows Local
 Setup And Control section.
 

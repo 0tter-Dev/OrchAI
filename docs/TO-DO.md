@@ -112,7 +112,21 @@ mirroring the sibling project OrchFlow's own Windows launcher model:
 (`v0.4.1`); `tools/windows/orchai-control.bat` plus a root
 `orchai.bat` for routine local start/stop/restart lifecycle control
 (`v0.4.2`); and a double-click `tools/windows/bootstrap/` executable
-wrapping `orchai.bat` (`v0.4.3`).
+wrapping `orchai.bat` (`v0.4.3`). `v0.4.4` makes that bootstrap
+executable the documented, recommended Windows entry point (superseding
+the earlier decision to keep `orchai.bat` as the headline contract)
+ahead of the upcoming Desktop UI/UX pass, and relocates/renames its
+build output from `dist\windows\orchai-bootstrap.exe` to `OrchAI.exe`
+directly at the repository root -- a single, product-named,
+easy-to-find entry point for a user downloading or cloning the
+repository, and the natural home for the project's icon once a visual
+identity exists. `orchai.bat` and the two auxiliary `.bat` launchers
+are unchanged underneath it and remain fully supported for manual,
+scripted, or advanced use. `v0.4.4` also labels (title plus a short
+explanation) the console window that wraps the Desktop shell process,
+in place of the previously blank one, as a zero-risk interim
+improvement -- see the Next Implementation Roadmap below for the
+follow-up step that attempts to eliminate that window outright.
 
 Implemented planning items should be removed from this document as work
 progresses so it remains focused on what comes next. Roadmap items
@@ -126,11 +140,77 @@ broad, split it into sequential steps before implementation starts.
 Both workstreams this section previously tracked -- Task-bounded
 execution streaming and the Windows bootstrap/launcher model -- are
 now complete as of `v0.4.3`; see the "Current Implementation
-Sequence" section above for what shipped. No numbered step is
-currently planned. The Studio module and the multi-user/per-user
-authorization revisit remain explicitly deferred, not started --- see
-the Cross-Cutting Rules below for the latter's prerequisite. A Desktop
-UX revalidation pass against the Codex/Claude Code comparison in
+Sequence" section above for what shipped, including `v0.4.4`'s
+`OrchAI.exe` relocation. Packaging that executable further as a full
+installer (Start Menu shortcut, an application icon, silent/uninstall
+support) is explicitly deferred until after the upcoming Desktop
+UI/UX pass -- a future mention only, not a numbered step, until
+explicitly scoped.
+
+Three small, independent steps are planned ahead of that UI/UX pass,
+so the visual work starts on a current, unblocked foundation:
+
+1. **Python dependency maintenance bump.** Refresh the patch/minor-only
+   outdated dependencies reported by `uv pip list --outdated`
+   (`litellm`, `pydantic`/`pydantic-core`, `psycopg`/`psycopg-binary`,
+   `pyjwt`, `typer`, `boto3`/`botocore`, `anyio`, `click`, `filelock`,
+   `huggingface-hub`, `idna`, `importlib-metadata`, `jiter`,
+   `multidict`, `pygments`, `regex`, `tqdm`, `tzdata`), plus the
+   pinned dev dependency `ruff==0.15.11` to its current latest
+   (`0.16.7` as of this writing -- re-check before implementing, since
+   both this and every version above drift). Scope: `uv lock
+   --upgrade` (or targeted per-package bumps), re-run `uv run ruff
+   check` against any newly introduced lint rules, full test suite
+   green, `uv lock --check` clean. `openai` (pulled in transitively by
+   `litellm`, not a direct dependency) is explicitly out of scope --
+   its version follows `litellm`'s own pin, not a decision made here.
+   No application code changes expected beyond ruff auto-fixes, if
+   any. Version bump: patch.
+
+2. **Frontend toolchain major bump (React 19, Vite 8,
+   `@vitejs/plugin-react` 6).** `apps/desktop/frontend` currently pins
+   React `18.3.1`, Vite `6.4.3`, and `@vitejs/plugin-react` `4.7.0`;
+   current latest are React `19.3.0`, Vite `8.3.0`, and
+   `@vitejs/plugin-react` `6.1.1` (re-check before implementing).
+   Scope: a pure toolchain upgrade following each project's official
+   migration guide, with **no visual or layout change** -- the
+   Desktop shell (Forge chat, Approval Card, Studio skeleton) must
+   still render and behave identically to today, verified manually
+   after the bump. Deliberately sequenced *before* the Desktop UI/UX
+   pass rather than during or after it, so that pass builds new
+   components on the current toolchain instead of having to migrate
+   freshly-written components a second time. `chart.js` is already
+   current and out of scope. Version bump: patch (tooling only, no
+   behavior change).
+
+3. **Desktop shell console window: eliminate, or clearly explain if
+   elimination proves unsafe.** `Start-DesktopProcess` in
+   `scripts/orchai-local-process-control.ps1` wraps the Desktop shell
+   process in a visible `cmd.exe` window (`WindowStyle=Normal`,
+   `UseShellExecute=true`) purely because `Hidden`/`Minimized` was
+   observed (PR #29) to break pywebview's WebView2 initialization with
+   COM-threading errors. A `CreateNoWindow` attempt (a different
+   mechanism -- no console ever allocated, instead of allocated then
+   hidden) was tried and reverted after it produced a silent hang
+   during testing; that same test session then also failed to
+   reproduce the known-good `Normal` behavior reliably, meaning this
+   project's own automation session cannot be trusted to validate
+   native WebView2 window behavior at all -- any fix here must be
+   validated on a real, interactive Windows session, not this one.
+   Scope: research and attempt an approach that avoids all three
+   observed failure modes (console visible-and-empty; hidden-and-
+   broken; no-window-and-hung) -- candidates include invoking the
+   venv's `pythonw.exe` directly instead of `python.exe` under a
+   wrapping `cmd.exe`, or another mechanism found during research. The
+   interim fix already shipped in `v0.4.4` (a labeled, explanatory
+   console window instead of a blank one) stays in place unless this
+   step finds a safe way to eliminate the window outright. Version
+   bump: patch, only if elimination is actually achieved.
+
+The Studio module and the multi-user/per-user authorization revisit
+remain explicitly deferred, not started --- see the Cross-Cutting
+Rules below for the latter's prerequisite. A Desktop UX revalidation
+pass against the Codex/Claude Code comparison in
 `docs/ARCHITECTURAL-CONTRACT.md` §7 is now easier with a single
 `orchai.bat` able to start/stop/restart the Desktop shell on demand,
 but remains a future mention only, not a numbered step, until

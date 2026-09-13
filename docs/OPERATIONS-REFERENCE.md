@@ -328,7 +328,17 @@ command.
 
 ## Windows Local Setup And Control
 
-`orchai.bat` (repository root) is the recommended entrypoint for
+The recommended entrypoint for first-time Windows setup and
+day-to-day startup is the double-click bootstrap executable (below):
+build it once, then double-click it from then on to check
+prerequisites, prepare `.env`, sync dependencies, and start OrchAI —
+by default the Desktop shell, today's primary way of running OrchAI.
+It is a thin wrapper: everything it does goes through the three `.bat`
+launchers documented in this section, which remain available directly
+for manual or advanced control.
+
+`orchai.bat` (repository root) is the entrypoint the bootstrap
+executable itself wraps, and remains directly usable for manual
 first-time Windows setup or day-to-day local startup: `[1]`/`[2]` run
 checks then start (headless API / Desktop), `[3]` opens the API docs
 in a browser, `[4]`/`[5]` open the Setup/Control menus, `[0]` exits.
@@ -402,11 +412,14 @@ built via `tools/windows/build-bootstrap.bat`):
 tools\windows\build-bootstrap.bat
 ```
 
-The build outputs `dist\windows\orchai-bootstrap.exe` (a small .NET 9
-`net9.0-windows`, single-file, framework-dependent console project;
-the .NET SDK is required only to build it, never to run OrchAI
-itself, and the generated executable is a gitignored local build
-artifact, never committed). It resolves the repository root by
+The build outputs `OrchAI.exe` directly at the repository root (a
+small .NET 9 `net9.0-windows`, single-file, framework-dependent
+console project; the .NET SDK is required only to build it, never to
+run OrchAI itself, and the generated executable is a gitignored local
+build artifact, never committed) — the product-named, single entry
+point a user downloading or cloning the repository sees first, rather
+than a generic name buried under `dist\windows\`. It resolves the
+repository root by
 walking up from its own directory or the current directory looking
 for `orchai.bat`, validates `orchai.bat`/`orchai-setup.bat`/
 `orchai-control.bat` exist, checks local prerequisites (`uv` always;
@@ -425,12 +438,20 @@ surface: `--repo <path>`, `--mode api|desktop`, `--check-only`,
 `--status`, `--no-browser` (meaningful only in `api` mode),
 `--pause-on-exit`, `--help`. Explicitly out of scope, matching
 OrchFlow's own non-goals: installing global software, downloading
-Python/`uv`/Node/AI models, replacing `orchai.bat` as the documented
-startup contract, or bypassing `orchai-control.bat` for process
-ownership — this is the first-run onboarding layer in front of the
-whole repository (setup plus choice of mode), not a repackaging of the
-Desktop shell itself (that remains the separate PyInstaller packaging
-in `apps/desktop/shell/packaging/orchai_desktop.spec`).
+Python/`uv`/Node/AI models, or bypassing `orchai-control.bat` for
+process ownership — this is the first-run onboarding layer in front of
+the whole repository (setup plus choice of mode), not a repackaging of
+the Desktop shell itself (that remains the separate PyInstaller
+packaging in `apps/desktop/shell/packaging/orchai_desktop.spec`).
+Packaging it further as a full installer (Start Menu shortcut, an
+application icon, silent/uninstall support) is intentionally deferred
+until after the Desktop UI/UX pass — see `docs/TO-DO.md`.
+
+This executable is now the documented, recommended startup contract
+for Windows users (superseding the earlier decision to keep `orchai.bat`
+as the headline entrypoint): `orchai.bat` and the two auxiliary
+launchers remain fully supported and unchanged underneath it, for
+manual, scripted, or advanced use.
 
 ## Troubleshooting
 

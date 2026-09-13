@@ -25,6 +25,8 @@ dist/
 node_modules/
 tools/windows/bootstrap/bin/
 tools/windows/bootstrap/obj/
+/OrchAI.exe
+/OrchAI.pdb
 
 # Local runtime state
 .orchai/

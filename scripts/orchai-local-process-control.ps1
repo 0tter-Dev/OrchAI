@@ -312,6 +312,9 @@ function Start-DesktopProcess {
     Write-Host "Starting OrchAI (Desktop shell) ..."
     Remove-Item -LiteralPath $desktopLogFile -Force -ErrorAction SilentlyContinue
     Write-ServiceCommand -Path $desktopCommandFile -Lines @(
+        "title OrchAI Desktop shell (do not close -- closing this window stops OrchAI)",
+        "echo OrchAI Desktop shell is running. Do not close this window -- closing it stops OrchAI.",
+        "echo The application window will open in a moment.",
         "uv run --extra desktop python -m apps.desktop.shell.main >> `"$desktopLogFile`" 2>&1"
     )
     # The Desktop shell opens its own visible pywebview window -- unlike
@@ -324,7 +327,16 @@ function Start-DesktopProcess {
     # UI thread, and a hidden/minimized parent console show-state hint
     # was observed (during manual testing) to break that initialization
     # with COM threading errors -- confirmed by comparing against a
-    # direct (non-wrapped) launch, which had no such errors.
+    # direct (non-wrapped) launch, which had no such errors. A later
+    # attempt to hide this console via CreateNoWindow (no console
+    # allocated at all, instead of allocated-then-hidden) was also
+    # tried and also confirmed broken -- during manual testing it left
+    # the pywebview window visible but completely unresponsive (0% CPU
+    # growth, no startup log output at all) rather than crashing, which
+    # is a worse failure mode since nothing indicates a problem. Until a
+    # safe way to suppress this console is found, it stays visible but
+    # labeled (Write-ServiceCommand lines above), instead of appearing
+    # as an unexplained blank window.
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = "cmd.exe"
     $startInfo.UseShellExecute = $true

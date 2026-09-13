@@ -6,7 +6,7 @@ if "%TOOLS_DIR:~-1%"=="\" set "TOOLS_DIR=%TOOLS_DIR:~0,-1%"
 for %%I in ("%TOOLS_DIR%\..\..") do set "ROOT_DIR=%%~fI"
 
 set "PROJECT_FILE=%TOOLS_DIR%\bootstrap\OrchAI.Bootstrap.csproj"
-set "OUTPUT_DIR=%ROOT_DIR%\dist\windows"
+set "OUTPUT_DIR=%ROOT_DIR%"
 
 if /I "%~1"=="check" goto CHECK_ONLY
 
@@ -27,14 +27,14 @@ echo Output:  %OUTPUT_DIR%
 call dotnet publish "%PROJECT_FILE%" --configuration Release --runtime win-x64 --output "%OUTPUT_DIR%"
 if errorlevel 1 exit /b %ERRORLEVEL%
 
-if not exist "%OUTPUT_DIR%\orchai-bootstrap.exe" (
-  echo [error] Build completed but orchai-bootstrap.exe was not found.
+if not exist "%OUTPUT_DIR%\OrchAI.exe" (
+  echo [error] Build completed but OrchAI.exe was not found.
   exit /b 1
 )
 
 echo.
 echo [ok] Bootstrap executable created at:
-echo      %OUTPUT_DIR%\orchai-bootstrap.exe
+echo      %OUTPUT_DIR%\OrchAI.exe
 exit /b 0
 
 :CHECK_ONLY
