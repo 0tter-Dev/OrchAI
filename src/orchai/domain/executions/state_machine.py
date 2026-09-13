@@ -36,7 +36,7 @@ class ExecutionStateMachine:
         self._transitions = dict(transitions)
 
     @classmethod
-    def default(cls) -> "ExecutionStateMachine":
+    def default(cls) -> ExecutionStateMachine:
         return cls(
             {
                 ExecutionState.REQUESTED: frozenset(

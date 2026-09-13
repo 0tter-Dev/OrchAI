@@ -114,7 +114,7 @@ def test_run_adapter_operation_write_source(tmp_path) -> None:
 
 def test_run_adapter_operation_git_status(tmp_path) -> None:
     async def run() -> None:
-        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)  # noqa: ASYNC221 - test fixture setup, runs before any concurrent async work starts
         adapter = LocalFilesystemProjectAdapter(tmp_path)
         command = RunProjectOperationCommand(
             project_root=tmp_path,

@@ -107,7 +107,7 @@ class LiteLLMProvider(AIProviderPort, ConversationAIProviderPort):
                 api_base=self._base_url,
                 timeout=self._timeout_seconds,
             )
-        except Exception as exc:  # noqa: BLE001 - litellm raises provider-specific types
+        except Exception as exc:
             raise AIProviderError(f"litellm request failed: {exc}") from exc
 
         output = _extract_output_text(response)
@@ -170,7 +170,7 @@ class LiteLLMProvider(AIProviderPort, ConversationAIProviderPort):
                 api_base=self._base_url,
                 timeout=self._timeout_seconds,
             )
-        except Exception as exc:  # noqa: BLE001 - litellm raises provider-specific types
+        except Exception as exc:
             raise AIProviderError(f"litellm request failed: {exc}") from exc
 
         usage = getattr(response, "usage", None)
@@ -232,7 +232,7 @@ async def _stream_litellm(
             stream=True,
             stream_options={"include_usage": True},
         )
-    except Exception as exc:  # noqa: BLE001 - litellm raises provider-specific types
+    except Exception as exc:
         raise AIProviderError(f"litellm request failed: {exc}") from exc
 
     try:
@@ -252,7 +252,7 @@ async def _stream_litellm(
             yield delta_text, finished, input_tokens, output_tokens
     except AIProviderError:
         raise
-    except Exception as exc:  # noqa: BLE001 - litellm raises provider-specific types
+    except Exception as exc:
         raise AIProviderError(f"litellm stream failed: {exc}") from exc
 
 

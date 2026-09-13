@@ -53,7 +53,11 @@ from orchai.application.projects.ports import (
     ProjectAdapterRegistry,
 )
 from orchai.application.suggestions import SuggestionEngine
-from orchai.application.tasks import CreateTaskCommand, TaskService, TransitionTaskCommand
+from orchai.application.tasks import (
+    CreateTaskCommand,
+    TaskService,
+    TransitionTaskCommand,
+)
 from orchai.domain.actions import ActionName
 from orchai.domain.authorization import Authorization
 from orchai.domain.identifiers import ModelId, TaskId
@@ -380,7 +384,7 @@ class Orchestrator:
         ``automatic_policy.allowed_operations``.
         """
 
-        adapter, readiness, project = await connect_project(
+        adapter, _readiness, project = await connect_project(
             create_project_adapter=self._create_project_adapter,
             project_service=self._project_service,
             event_publisher=self._event_publisher,

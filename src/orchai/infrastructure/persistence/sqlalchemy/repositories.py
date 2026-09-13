@@ -12,7 +12,10 @@ from sqlalchemy import delete, insert, select, update
 from orchai.application.audit.ports import AuditRepository
 from orchai.application.authorization.ports import AuthorizationRepository
 from orchai.application.context.ports import ContextResolutionRepository
-from orchai.application.conversations.ports import ConversationRepository, MessageRepository
+from orchai.application.conversations.ports import (
+    ConversationRepository,
+    MessageRepository,
+)
 from orchai.application.events.ports import EventRepository
 from orchai.application.executions.ports import ExecutionRepository
 from orchai.application.identity.ports import (
@@ -53,7 +56,12 @@ from orchai.domain.context import (
     ContextResolutionRecord,
     ContextSource,
 )
-from orchai.domain.conversations import Conversation, Message, MessageRole, MessageStatus
+from orchai.domain.conversations import (
+    Conversation,
+    Message,
+    MessageRole,
+    MessageStatus,
+)
 from orchai.domain.events import DomainEvent, EventType
 from orchai.domain.executions import (
     Execution,

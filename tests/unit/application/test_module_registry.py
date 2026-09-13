@@ -1,4 +1,10 @@
-from orchai.application.modules import FORGE, MODULE_REGISTRY, STUDIO, get_module, list_modules
+from orchai.application.modules import (
+    FORGE,
+    MODULE_REGISTRY,
+    STUDIO,
+    get_module,
+    list_modules,
+)
 from orchai.domain.identifiers import ModuleId
 
 

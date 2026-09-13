@@ -12,13 +12,13 @@ from orchai.application.identity import (
     PermissionGrantCommand,
     RolePermissionCommand,
 )
+from orchai.bootstrap.runtime import PERMISSION_CATALOG
+from orchai.domain.identifiers import ProjectId, UserId
 from orchai.infrastructure.identity import (
     Argon2PasswordHasher,
     JWTAccessTokenIssuer,
     Sha256RefreshTokenHasher,
 )
-from orchai.bootstrap.runtime import PERMISSION_CATALOG
-from orchai.domain.identifiers import ProjectId, UserId
 from orchai.infrastructure.persistence import (
     SQLAlchemyAccessControlRepository,
     SQLAlchemyAccessRoleRepository,

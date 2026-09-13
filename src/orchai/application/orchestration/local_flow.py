@@ -10,14 +10,13 @@ from orchai.application.orchestration.orchestrator import (
     AutomaticExecutionPolicy,
     OrchestrationStreamEvent,
     Orchestrator,
-    RunProjectOperationCommand,
     RunLocalFlowCommand,
+    RunProjectOperationCommand,
     RunTaskWorkflowStageCommand,
     TaskWorkflowStage,
 )
 from orchai.domain.identifiers import TaskId
-from orchai.domain.projects import ProviderTarget
-from orchai.domain.projects import ProjectOperation
+from orchai.domain.projects import ProjectOperation, ProviderTarget
 from orchai.domain.tasks import ExecutionMode
 
 

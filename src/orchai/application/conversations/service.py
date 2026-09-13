@@ -26,7 +26,12 @@ from orchai.application.conversations.ports import (
     MessageRepository,
 )
 from orchai.application.executions.ports import AIProviderError
-from orchai.domain.conversations import Conversation, Message, MessageRole, MessageStatus
+from orchai.domain.conversations import (
+    Conversation,
+    Message,
+    MessageRole,
+    MessageStatus,
+)
 from orchai.domain.executions import ResourceUsage
 from orchai.domain.identifiers import (
     ConversationId,

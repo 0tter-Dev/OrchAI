@@ -12,8 +12,8 @@ from orchai.application.executions.commands import (
     TransitionExecutionCommand,
 )
 from orchai.application.executions.ports import (
-    AIProviderContractError,
     AIProviderContextItem,
+    AIProviderContractError,
     AIProviderError,
     AIProviderExecutionRequest,
     AIProviderExecutionResult,
@@ -22,7 +22,6 @@ from orchai.application.executions.ports import (
     ExecutionRepository,
 )
 from orchai.application.executions.service import ExecutionService
-from orchai.infrastructure.projects.errors import ProjectAdapterError
 from orchai.domain.context import ContextError
 from orchai.domain.executions import (
     Execution,
@@ -31,6 +30,7 @@ from orchai.domain.executions import (
     ResourceUsage,
 )
 from orchai.domain.identifiers import ExecutionId
+from orchai.infrastructure.projects.errors import ProjectAdapterError
 
 _ACTIVE_EXECUTION_TASKS: dict[ExecutionId, asyncio.Task[Execution]] = {}
 
@@ -210,7 +210,7 @@ class ExecutionEngine:
                     "error_boundary": "context",
                 },
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - provider/adapter errors are arbitrary; must fail the execution, not crash
             return await self._fail_execution(
                 execution.id,
                 output="",
@@ -356,7 +356,7 @@ class ExecutionEngine:
                     "error_boundary": "context",
                 },
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - provider/adapter errors are arbitrary; must fail the execution, not crash
             await self._fail_execution(
                 execution.id,
                 output="",

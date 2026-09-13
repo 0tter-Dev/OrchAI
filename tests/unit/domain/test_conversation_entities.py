@@ -1,4 +1,9 @@
-from orchai.domain.conversations import Conversation, Message, MessageRole, MessageStatus
+from orchai.domain.conversations import (
+    Conversation,
+    Message,
+    MessageRole,
+    MessageStatus,
+)
 from orchai.domain.executions import ResourceUsage
 from orchai.domain.identifiers import ConversationId, ModuleId
 

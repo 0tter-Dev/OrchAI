@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from orchai.application.events.ports import EventPublisher
-from orchai.domain.identifiers import ProjectId, TaskId
 from orchai.application.tasks.commands import CreateTaskCommand, TransitionTaskCommand
 from orchai.application.tasks.ports import TaskRepository
 from orchai.domain.events import DomainEvent, EventType
-from orchai.domain.tasks import Task, TaskScope, TaskState, TaskStateMachine, TaskTransition
+from orchai.domain.identifiers import ProjectId, TaskId
+from orchai.domain.tasks import (
+    Task,
+    TaskScope,
+    TaskState,
+    TaskStateMachine,
+    TaskTransition,
+)
 
 
 class TaskService:

@@ -102,7 +102,7 @@ def test_context_service_resolves_only_authorized_context(tmp_path) -> None:
         records = await context_resolution_repository.list_by_execution(execution.id)
         assert len(records) == 1
         assert records[0].reference.resource == "README.md"
-        assert records[0].content_bytes == len("Project docs".encode("utf-8"))
+        assert records[0].content_bytes == len(b"Project docs")
 
     asyncio.run(run())
 

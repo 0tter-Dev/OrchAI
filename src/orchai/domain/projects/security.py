@@ -81,18 +81,18 @@ class ProjectSecurityProfile:
         object.__setattr__(
             self,
             "restricted_areas",
-            tuple(sorted(set(area.strip() for area in self.restricted_areas if area.strip()))),
+            tuple(sorted({area.strip() for area in self.restricted_areas if area.strip()})),
         )
         object.__setattr__(
             self,
             "sensitive_patterns",
             tuple(
                 sorted(
-                    set(
+                    {
                         pattern.strip().lower()
                         for pattern in self.sensitive_patterns
                         if pattern.strip()
-                    )
+                    }
                 )
             ),
         )
@@ -116,7 +116,7 @@ class ProjectSecurityProfile:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ProjectSecurityProfile":
+    def from_dict(cls, data: Mapping[str, Any]) -> ProjectSecurityProfile:
         return cls(
             readiness_level=ProjectReadinessLevel(
                 data.get("readiness_level", ProjectReadinessLevel.LEVEL_0_CONNECTABLE)

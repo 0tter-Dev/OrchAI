@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from orchai.domain.authorization import Authorization, AuthorizationDecisionStatus
-from orchai.domain.identifiers import AuthorizationId
-from orchai.domain.identifiers import TaskId
+from orchai.domain.identifiers import AuthorizationId, TaskId
 
 
 class AuthorizationRepository(Protocol):

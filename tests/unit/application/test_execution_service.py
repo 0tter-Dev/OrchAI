@@ -16,12 +16,15 @@ from orchai.application.executions import (
 )
 from orchai.domain.actions import ActionName
 from orchai.domain.authorization import (
-    AuthorizationMismatchError,
     AuthorizationDecisionStatus,
+    AuthorizationMismatchError,
     AuthorizationNotGrantedError,
 )
 from orchai.domain.events import EventType
-from orchai.domain.executions import ExecutionState, InvalidExecutionStateTransitionError
+from orchai.domain.executions import (
+    ExecutionState,
+    InvalidExecutionStateTransitionError,
+)
 from orchai.domain.identifiers import ModelId, TaskId
 from orchai.domain.roles import RoleName
 from orchai.domain.tasks import ExecutionMode

@@ -125,7 +125,7 @@ def test_gate_marks_a_suggestion_presented_when_policy_denies() -> None:
 
 def test_gate_grants_authorization_when_policy_allows() -> None:
     async def run() -> None:
-        authorization_service, suggestion_engine = _build_services()
+        authorization_service, _suggestion_engine = _build_services()
         policy_service = _FakePolicyService(
             PolicyDecision(allowed=True, reason="allowed_for_test")
         )

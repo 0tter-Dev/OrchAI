@@ -8,7 +8,13 @@ from typing import Any
 
 from orchai.domain.actions import ActionName
 from orchai.domain.executions import ExecutionState, ResourceUsage
-from orchai.domain.identifiers import AuthorizationId, ExecutionId, ModelId, ProjectId, TaskId
+from orchai.domain.identifiers import (
+    AuthorizationId,
+    ExecutionId,
+    ModelId,
+    ProjectId,
+    TaskId,
+)
 from orchai.domain.roles import RoleName
 
 

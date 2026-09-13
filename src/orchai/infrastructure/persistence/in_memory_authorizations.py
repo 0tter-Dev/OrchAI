@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from orchai.application.authorization.ports import AuthorizationRepository
 from orchai.domain.authorization import Authorization, AuthorizationDecisionStatus
-from orchai.domain.identifiers import AuthorizationId
-from orchai.domain.identifiers import TaskId
+from orchai.domain.identifiers import AuthorizationId, TaskId
 
 
 class AuthorizationNotFoundError(LookupError):

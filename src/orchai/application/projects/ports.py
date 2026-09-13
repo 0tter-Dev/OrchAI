@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
-from typing import Protocol
+from typing import Any, Protocol
 
 from orchai.domain.capabilities import CapabilityName
 from orchai.domain.context import ContextItem, ContextReference, ContextSource

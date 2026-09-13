@@ -9,10 +9,19 @@ from types import MappingProxyType
 from typing import Any
 
 from orchai.domain.actions import ActionName
-from orchai.domain.identifiers import AuthorizationId, ExecutionId, ModelId, ProjectId, TaskId
-from orchai.domain.roles import RoleName
-from orchai.domain.executions.state_machine import ExecutionStateMachine, ExecutionTransition
+from orchai.domain.executions.state_machine import (
+    ExecutionStateMachine,
+    ExecutionTransition,
+)
 from orchai.domain.executions.states import ExecutionState
+from orchai.domain.identifiers import (
+    AuthorizationId,
+    ExecutionId,
+    ModelId,
+    ProjectId,
+    TaskId,
+)
+from orchai.domain.roles import RoleName
 
 
 @dataclass(frozen=True, slots=True)

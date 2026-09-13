@@ -13,7 +13,11 @@ from orchai.application.executions import (
     TransitionExecutionCommand,
 )
 from orchai.application.projects import ProjectService, RegisterProjectCommand
-from orchai.application.tasks import CreateTaskCommand, TaskService, TransitionTaskCommand
+from orchai.application.tasks import (
+    CreateTaskCommand,
+    TaskService,
+    TransitionTaskCommand,
+)
 from orchai.domain.actions import ActionName
 from orchai.domain.authorization import AuthorizationDecisionStatus
 from orchai.domain.capabilities import CapabilityName

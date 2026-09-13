@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import inspect
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Awaitable
 
 from orchai.domain.events import DomainEvent, EventType
 
