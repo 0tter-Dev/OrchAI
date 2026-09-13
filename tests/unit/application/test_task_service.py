@@ -1,7 +1,11 @@
 import asyncio
 
 from orchai.application.events import InProcessEventDispatcher
-from orchai.application.tasks import CreateTaskCommand, TaskService, TransitionTaskCommand
+from orchai.application.tasks import (
+    CreateTaskCommand,
+    TaskService,
+    TransitionTaskCommand,
+)
 from orchai.domain.events import EventType
 from orchai.domain.tasks import ExecutionMode, TaskState
 from orchai.infrastructure.persistence import InMemoryTaskRepository

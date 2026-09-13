@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from orchai.application.conversations.ports import ConversationRepository, MessageRepository
+from orchai.application.conversations.ports import (
+    ConversationRepository,
+    MessageRepository,
+)
 from orchai.domain.conversations import Conversation, Message
 from orchai.domain.identifiers import ConversationId, MessageId, ModuleId, ProjectId
 

@@ -33,7 +33,7 @@ class TaskStateMachine:
         self._transitions = dict(transitions)
 
     @classmethod
-    def default(cls) -> "TaskStateMachine":
+    def default(cls) -> TaskStateMachine:
         return cls(
             {
                 TaskState.CREATED: frozenset(

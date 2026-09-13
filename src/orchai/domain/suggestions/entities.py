@@ -44,7 +44,7 @@ class Suggestion:
         object.__setattr__(self, "expected_impact", expected_impact)
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
-    def with_status(self, status: SuggestionStatus) -> "Suggestion":
+    def with_status(self, status: SuggestionStatus) -> Suggestion:
         return Suggestion(
             id=self.id,
             task_id=self.task_id,

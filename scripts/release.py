@@ -40,7 +40,7 @@ def project_version(root: Path = ROOT) -> str:
     pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
     version = pyproject["project"]["version"]
     if not isinstance(version, str):
-        raise ValueError("pyproject.toml project.version must be a string")
+        raise TypeError("pyproject.toml project.version must be a string")
     return version
 
 

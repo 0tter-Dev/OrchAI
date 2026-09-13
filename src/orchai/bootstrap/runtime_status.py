@@ -76,7 +76,7 @@ async def collect_runtime_status(
 def _check_database(database: SQLAlchemyDatabase) -> dict[str, Any]:
     try:
         database.ping()
-    except Exception as exc:  # pragma: no cover - exercised through integration
+    except Exception as exc:  # noqa: BLE001 - database drivers raise arbitrary types; pragma: no cover - exercised through integration
         return {"reachable": False, "message": str(exc)}
     return {"reachable": True, "message": "Database connection succeeded."}
 

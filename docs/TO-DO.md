@@ -127,6 +127,27 @@ explanation) the console window that wraps the Desktop shell process,
 in place of the previously blank one, as a zero-risk interim
 improvement -- see the Next Implementation Roadmap below for the
 follow-up step that attempts to eliminate that window outright.
+`v0.4.5` is the Python dependency maintenance bump: `uv lock --upgrade`
+refreshed every patch/minor-pinned dependency to its current latest
+(`litellm`, `pydantic`/`pydantic-core`, `psycopg`/`psycopg-binary`,
+`pyjwt`, `typer`, `boto3`/`botocore`, `anyio`, `click`, `filelock`,
+`huggingface-hub`, `idna`, `importlib-metadata`, `jiter`, `multidict`,
+`pygments`, `regex`, `tqdm`, `tzdata`) and the pinned dev dependency
+`ruff` from `0.15.11` to `0.16.7`. The newer ruff enabled several new
+lint rules that surfaced 58 findings across the existing codebase (41
+auto-fixed via `--fix`; the remaining 17 handled individually): two
+`C401` generator-to-set-comprehension rewrites and one `TRY004`
+`ValueError`-to-`TypeError` correction in `scripts/release.py` (all
+mechanical, behavior-preserving); two `RUF059` unused-unpacked-variable
+renames (prefixed with `_`); a `src/orchai/interfaces/api/main.py`
+per-file `B008` ignore added alongside the existing one for
+`cli/main.py`, since ruff's stricter `B008` now also flags the call
+nested inside FastAPI's `Depends(...)` parameter defaults, an
+intentional framework pattern; and four inline `# noqa` suppressions
+(three `BLE001`, one `ASYNC221`) on pre-existing, deliberately broad
+exception boundaries and a test-fixture subprocess call, each with an
+inline justification, matching this codebase's existing suppression
+style. No behavior change; 301 tests still pass.
 
 Implemented planning items should be removed from this document as work
 progresses so it remains focused on what comes next. Roadmap items
@@ -141,33 +162,16 @@ Both workstreams this section previously tracked -- Task-bounded
 execution streaming and the Windows bootstrap/launcher model -- are
 now complete as of `v0.4.3`; see the "Current Implementation
 Sequence" section above for what shipped, including `v0.4.4`'s
-`OrchAI.exe` relocation. Packaging that executable further as a full
-installer (Start Menu shortcut, an application icon, silent/uninstall
-support) is explicitly deferred until after the upcoming Desktop
-UI/UX pass -- a future mention only, not a numbered step, until
-explicitly scoped.
+`OrchAI.exe` relocation and `v0.4.5`'s Python dependency maintenance
+bump. Packaging the bootstrap executable further as a full installer
+(Start Menu shortcut, an application icon, silent/uninstall support)
+is explicitly deferred until after the upcoming Desktop UI/UX pass --
+a future mention only, not a numbered step, until explicitly scoped.
 
-Three small, independent steps are planned ahead of that UI/UX pass,
-so the visual work starts on a current, unblocked foundation:
+Two small, independent steps are planned ahead of that UI/UX pass, so
+the visual work starts on a current, unblocked foundation:
 
-1. **Python dependency maintenance bump.** Refresh the patch/minor-only
-   outdated dependencies reported by `uv pip list --outdated`
-   (`litellm`, `pydantic`/`pydantic-core`, `psycopg`/`psycopg-binary`,
-   `pyjwt`, `typer`, `boto3`/`botocore`, `anyio`, `click`, `filelock`,
-   `huggingface-hub`, `idna`, `importlib-metadata`, `jiter`,
-   `multidict`, `pygments`, `regex`, `tqdm`, `tzdata`), plus the
-   pinned dev dependency `ruff==0.15.11` to its current latest
-   (`0.16.7` as of this writing -- re-check before implementing, since
-   both this and every version above drift). Scope: `uv lock
-   --upgrade` (or targeted per-package bumps), re-run `uv run ruff
-   check` against any newly introduced lint rules, full test suite
-   green, `uv lock --check` clean. `openai` (pulled in transitively by
-   `litellm`, not a direct dependency) is explicitly out of scope --
-   its version follows `litellm`'s own pin, not a decision made here.
-   No application code changes expected beyond ruff auto-fixes, if
-   any. Version bump: patch.
-
-2. **Frontend toolchain major bump (React 19, Vite 8,
+1. **Frontend toolchain major bump (React 19, Vite 8,
    `@vitejs/plugin-react` 6).** `apps/desktop/frontend` currently pins
    React `18.3.1`, Vite `6.4.3`, and `@vitejs/plugin-react` `4.7.0`;
    current latest are React `19.3.0`, Vite `8.3.0`, and
@@ -183,7 +187,7 @@ so the visual work starts on a current, unblocked foundation:
    current and out of scope. Version bump: patch (tooling only, no
    behavior change).
 
-3. **Desktop shell console window: eliminate, or clearly explain if
+2. **Desktop shell console window: eliminate, or clearly explain if
    elimination proves unsafe.** `Start-DesktopProcess` in
    `scripts/orchai-local-process-control.ps1` wraps the Desktop shell
    process in a visible `cmd.exe` window (`WindowStyle=Normal`,

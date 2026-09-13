@@ -22,7 +22,9 @@ from orchai.infrastructure.persistence.in_memory_identity import (
     InMemoryRefreshTokenRepository,
     InMemoryUserRepository,
 )
-from orchai.infrastructure.persistence.in_memory_metrics import InMemoryMetricsRepository
+from orchai.infrastructure.persistence.in_memory_metrics import (
+    InMemoryMetricsRepository,
+)
 from orchai.infrastructure.persistence.in_memory_policies import (
     InMemoryAutomaticPolicyRepository,
 )

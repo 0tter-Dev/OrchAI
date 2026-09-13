@@ -12,7 +12,10 @@ from orchai.application.authorization import AuthorizationService
 from orchai.application.authorization.ports import AuthorizationRepository
 from orchai.application.context import ContextService
 from orchai.application.context.ports import ContextResolutionRepository
-from orchai.application.conversations import ConversationAIProviderPort, ConversationService
+from orchai.application.conversations import (
+    ConversationAIProviderPort,
+    ConversationService,
+)
 from orchai.application.events import EventEngine, EventRepository
 from orchai.application.executions import ExecutionService
 from orchai.application.executions.engine import ExecutionEngine

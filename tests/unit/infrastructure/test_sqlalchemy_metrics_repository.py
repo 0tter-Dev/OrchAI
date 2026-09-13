@@ -3,7 +3,10 @@ from datetime import UTC, datetime, timedelta
 
 from orchai.domain.identifiers import ProjectId
 from orchai.domain.metrics import MetricRecord
-from orchai.infrastructure.persistence import SQLAlchemyDatabase, SQLAlchemyMetricsRepository
+from orchai.infrastructure.persistence import (
+    SQLAlchemyDatabase,
+    SQLAlchemyMetricsRepository,
+)
 
 
 def test_summarize_with_no_group_by_returns_one_bucket_per_name(tmp_path) -> None:

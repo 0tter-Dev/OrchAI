@@ -7,8 +7,8 @@ from hashlib import sha256
 from orchai.application.executions.ports import ExecutionRepository
 from orchai.application.metrics.ports import MetricsRepository
 from orchai.domain.events import DomainEvent, EventType
-from orchai.domain.identifiers import MetricRecordId
 from orchai.domain.executions import Execution
+from orchai.domain.identifiers import MetricRecordId
 from orchai.domain.metrics import MetricRecord
 
 
@@ -114,5 +114,5 @@ def _records_for_execution(execution: Execution) -> tuple[MetricRecord, ...]:
 
 
 def _metric_record_id(execution: Execution, name: str) -> MetricRecordId:
-    raw = f"{execution.id}:{name}".encode("utf-8")
+    raw = f"{execution.id}:{name}".encode()
     return MetricRecordId(sha256(raw).hexdigest())

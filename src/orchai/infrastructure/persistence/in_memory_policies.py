@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from orchai.application.policies import AutomaticExecutionPolicy, AutomaticPolicyRepository
+from orchai.application.policies import (
+    AutomaticExecutionPolicy,
+    AutomaticPolicyRepository,
+)
 
 
 class InMemoryAutomaticPolicyRepository(AutomaticPolicyRepository):

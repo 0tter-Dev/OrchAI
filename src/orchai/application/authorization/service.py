@@ -16,8 +16,7 @@ from orchai.domain.authorization import (
     RequestedOperation,
 )
 from orchai.domain.events import DomainEvent, EventType
-from orchai.domain.identifiers import AuthorizationId
-from orchai.domain.identifiers import TaskId
+from orchai.domain.identifiers import AuthorizationId, TaskId
 
 
 class AuthorizationService:

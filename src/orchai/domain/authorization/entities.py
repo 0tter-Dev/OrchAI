@@ -40,7 +40,7 @@ class RequestedOperation:
             tuple(scope.strip() for scope in self.context_scope if scope.strip()),
         )
 
-    def matches(self, other: "RequestedOperation") -> bool:
+    def matches(self, other: RequestedOperation) -> bool:
         return self == other
 
 
@@ -120,7 +120,7 @@ class Authorization:
         return decision.status if decision is not None else None
 
     @classmethod
-    def request_authorization(cls, request: AuthorizationRequest) -> "Authorization":
+    def request_authorization(cls, request: AuthorizationRequest) -> Authorization:
         return cls(request=request)
 
     def record_decision(self, decision: AuthorizationDecision) -> None:

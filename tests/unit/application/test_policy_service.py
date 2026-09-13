@@ -1,6 +1,10 @@
 import asyncio
 
-from orchai.application.policies import AutomaticExecutionPolicy, LocalPolicyService, PolicyOperation
+from orchai.application.policies import (
+    AutomaticExecutionPolicy,
+    LocalPolicyService,
+    PolicyOperation,
+)
 from orchai.domain.actions import ActionName
 from orchai.domain.projects import (
     ProjectOperation,
