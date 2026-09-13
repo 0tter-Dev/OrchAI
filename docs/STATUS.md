@@ -20,7 +20,7 @@ forward.
 
 ## Current Project Stage
 
-OrchAI is currently in the `v0.4.5` implementation stage as of
+OrchAI is currently in the `v0.4.6` implementation stage as of
 `2026-09-13`.
 
 ## Feature Table
