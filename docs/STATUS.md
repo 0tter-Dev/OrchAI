@@ -20,8 +20,8 @@ forward.
 
 ## Current Project Stage
 
-OrchAI is currently in the `v0.4.3` implementation stage as of
-`2026-09-10`.
+OrchAI is currently in the `v0.4.4` implementation stage as of
+`2026-09-13`.
 
 ## Feature Table
 
@@ -73,7 +73,7 @@ OrchAI is currently in the `v0.4.3` implementation stage as of
 | CLI Implementation | `orchai` command surface | implemented | — |
 | Automated Test Suite | Unit and integration coverage | implemented | 301 tests passing |
 | Deployment Implementation | Container/deployment automation | in_progress | Root `Dockerfile` exists and was validated manually; no CI build step, compose file, or deployment automation yet |
-| Windows Local Setup And Control | Guided first-run environment check, routine start/stop/restart lifecycle control, and a double-click bootstrap executable for a Windows checkout | implemented | `orchai.bat` (root), `tools/windows/orchai-setup.bat`, `tools/windows/orchai-control.bat`/`scripts/orchai-local-process-control.ps1`, and `tools/windows/bootstrap/` (built via `tools/windows/build-bootstrap.bat` into `dist/windows/orchai-bootstrap.exe`), all adapted from OrchFlow's own launcher model |
+| Windows Local Setup And Control | Guided first-run environment check, routine start/stop/restart lifecycle control, and a double-click bootstrap executable for a Windows checkout | implemented | `OrchAI.exe` (root, built via `tools/windows/build-bootstrap.bat` from `tools/windows/bootstrap/`) is the primary entry point, wrapping `orchai.bat` (root), `tools/windows/orchai-setup.bat`, and `tools/windows/orchai-control.bat`/`scripts/orchai-local-process-control.ps1`, all adapted from OrchFlow's own launcher model |
 
 ## Implementation Notes
 

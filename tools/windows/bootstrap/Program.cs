@@ -367,7 +367,7 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine(
-            "  orchai-bootstrap.exe [--repo <path>] [--mode api|desktop] [--check-only] [--status] [--no-browser] [--pause-on-exit]");
+            "  OrchAI.exe [--repo <path>] [--mode api|desktop] [--check-only] [--status] [--no-browser] [--pause-on-exit]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --repo <path>   Use a specific OrchAI repository root.");

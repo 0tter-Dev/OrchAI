@@ -10,7 +10,7 @@ business logic in the core.
 
 ## Current Status
 
-Version: `v0.4.3`
+Version: `v0.4.4`
 
 The current implementation is an executable foundation, not a complete
 product.
@@ -65,8 +65,49 @@ environment directly:
 
 ## Windows Local Launcher
 
-For first-time Windows setup or day-to-day local startup in a cloned
-checkout, the recommended root entrypoint is:
+For first-time Windows setup and day-to-day startup in a cloned
+checkout, the recommended entrypoint is the double-click bootstrap
+executable. Build it once:
+
+```bat
+tools\windows\build-bootstrap.bat
+```
+
+Then double-click the result, or run it directly:
+
+```bat
+OrchAI.exe
+```
+
+The build outputs `OrchAI.exe` directly at the repository root (a
+small .NET 9 single-file console app; the .NET SDK is required only to
+build it, never to run OrchAI itself) — the single, product-named
+entry point a user downloading or cloning the repository sees first.
+It resolves the repository root by walking up from its own directory
+or the current directory looking for `orchai.bat`, checks local
+prerequisites (`uv` always; `node` only
+when `--mode desktop`, the default), then runs `orchai-setup.bat check`
+→ `orchai-control.bat start` → `orchai-control.bat status`, opening
+the API docs in a browser (`--mode api`) or leaving the Desktop window
+to open itself (`--mode desktop`, the default — the primary way most
+users are expected to run OrchAI today). CLI surface: `--repo <path>`,
+`--mode api|desktop`, `--check-only`, `--status`, `--no-browser` (api
+mode only), `--pause-on-exit`, `--help`. It never installs global
+software, downloads Python/`uv`/Node/AI models, or bypasses
+`orchai-control.bat` for process ownership — it is the first-run
+onboarding layer in front of the whole repository, not a repackaging
+of the Desktop shell itself (that remains the separate PyInstaller
+packaging in `apps/desktop/shell/packaging/`). The generated
+executable is a local build artifact and is not committed to the
+repository. Packaging it further as a full installer (Start Menu
+shortcut, an application icon, silent/uninstall support) is
+intentionally deferred — see `docs/TO-DO.md` — until after the Desktop
+UI/UX pass currently in progress.
+
+The bootstrap executable is a thin wrapper: it delegates to the same
+`.bat` launchers below, which remain available directly for manual or
+advanced control (development, debugging a failed check, or scripting
+non-interactive automation).
 
 ```bat
 orchai.bat
@@ -125,35 +166,6 @@ tools\windows\orchai-control.bat start desktop
 tools\windows\orchai-control.bat stop
 tools\windows\orchai-control.bat restart
 ```
-
-For a downloaded or cloned repository, a Windows bootstrap executable
-gives a double-click first-run experience without introducing a
-second, hidden orchestration layer alongside the `.bat` launchers
-above:
-
-```bat
-tools\windows\build-bootstrap.bat
-```
-
-The build outputs `dist\windows\orchai-bootstrap.exe` (a small .NET 9
-single-file console app; the .NET SDK is required only to build it,
-never to run OrchAI itself). It resolves the repository root by
-walking up from its own directory or the current directory looking
-for `orchai.bat`, validates the three launchers above exist, checks
-local prerequisites (`uv` always; `node` only when `--mode desktop`,
-the default), then runs `orchai-setup.bat check` → `orchai-control.bat
-start` → `orchai-control.bat status`, opening the API docs in a
-browser (`--mode api`) or leaving the Desktop window to open itself
-(`--mode desktop`). CLI surface: `--repo <path>`, `--mode api|desktop`,
-`--check-only`, `--status`, `--no-browser` (api mode only),
-`--pause-on-exit`, `--help`. It never installs global software,
-downloads Python/`uv`/Node/AI models, replaces `orchai.bat` as the
-documented startup contract, or bypasses `orchai-control.bat` for
-process ownership — it is the first-run onboarding layer in front of
-the whole repository, not a repackaging of the Desktop shell itself
-(that remains the separate PyInstaller packaging in
-`apps/desktop/shell/packaging/`). The generated executable is a local
-build artifact and is not committed to the repository.
 
 ## Configuration
 

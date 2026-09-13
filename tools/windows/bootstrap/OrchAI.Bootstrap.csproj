@@ -4,7 +4,7 @@
     <TargetFramework>net9.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>orchai-bootstrap</AssemblyName>
+    <AssemblyName>OrchAI</AssemblyName>
     <RootNamespace>OrchAI.Bootstrap</RootNamespace>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
