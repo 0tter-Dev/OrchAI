@@ -10,7 +10,7 @@ business logic in the core.
 
 ## Current Status
 
-Version: `v0.4.5`
+Version: `v0.4.6`
 
 The current implementation is an executable foundation, not a complete
 product.

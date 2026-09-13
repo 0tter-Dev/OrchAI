@@ -148,6 +148,24 @@ intentional framework pattern; and four inline `# noqa` suppressions
 exception boundaries and a test-fixture subprocess call, each with an
 inline justification, matching this codebase's existing suppression
 style. No behavior change; 301 tests still pass.
+`v0.4.6` is the frontend toolchain major bump: `apps/desktop/frontend`
+moved from React `18.3.1`/Vite `6.4.3`/`@vitejs/plugin-react` `4.7.0`
+to React `19.3.0`/Vite `8.3.0`/`@vitejs/plugin-react` `6.1.1`, a pure
+toolchain upgrade with no visual or layout change. A source-level
+audit before the bump found no legacy patterns React 19 deprecates
+(no `propTypes`/`defaultProps` on function components, no
+`ReactDOM.render`, no string refs -- `main.jsx` already used
+`createRoot`), so no application code changed beyond `package.json`/
+`package-lock.json`. Validated by building the new frontend and
+serving it through a real `orchai api serve` process (stub provider,
+scratch SQLite) at `/app/`, then exercising the full flow in a real
+browser: ProjectPicker (with a `window.pywebview` bridge stub, since
+no native shell is present outside the Desktop app) connecting this
+very repository, through ModuleSelect, into Forge's chat screen,
+creating a conversation and sending a message that streamed back
+through the same SSE `fetch`/`ReadableStream` path unchanged, and the
+Dashboard screen rendering real audit data -- zero console errors
+throughout. `chart.js` was already current and untouched.
 
 Implemented planning items should be removed from this document as work
 progresses so it remains focused on what comes next. Roadmap items
@@ -162,32 +180,16 @@ Both workstreams this section previously tracked -- Task-bounded
 execution streaming and the Windows bootstrap/launcher model -- are
 now complete as of `v0.4.3`; see the "Current Implementation
 Sequence" section above for what shipped, including `v0.4.4`'s
-`OrchAI.exe` relocation and `v0.4.5`'s Python dependency maintenance
-bump. Packaging the bootstrap executable further as a full installer
-(Start Menu shortcut, an application icon, silent/uninstall support)
-is explicitly deferred until after the upcoming Desktop UI/UX pass --
-a future mention only, not a numbered step, until explicitly scoped.
+`OrchAI.exe` relocation, `v0.4.5`'s Python dependency maintenance
+bump, and `v0.4.6`'s frontend toolchain major bump. Packaging the
+bootstrap executable further as a full installer (Start Menu
+shortcut, an application icon, silent/uninstall support) is
+explicitly deferred until after the upcoming Desktop UI/UX pass -- a
+future mention only, not a numbered step, until explicitly scoped.
 
-Two small, independent steps are planned ahead of that UI/UX pass, so
-the visual work starts on a current, unblocked foundation:
+One small step remains planned ahead of that UI/UX pass:
 
-1. **Frontend toolchain major bump (React 19, Vite 8,
-   `@vitejs/plugin-react` 6).** `apps/desktop/frontend` currently pins
-   React `18.3.1`, Vite `6.4.3`, and `@vitejs/plugin-react` `4.7.0`;
-   current latest are React `19.3.0`, Vite `8.3.0`, and
-   `@vitejs/plugin-react` `6.1.1` (re-check before implementing).
-   Scope: a pure toolchain upgrade following each project's official
-   migration guide, with **no visual or layout change** -- the
-   Desktop shell (Forge chat, Approval Card, Studio skeleton) must
-   still render and behave identically to today, verified manually
-   after the bump. Deliberately sequenced *before* the Desktop UI/UX
-   pass rather than during or after it, so that pass builds new
-   components on the current toolchain instead of having to migrate
-   freshly-written components a second time. `chart.js` is already
-   current and out of scope. Version bump: patch (tooling only, no
-   behavior change).
-
-2. **Desktop shell console window: eliminate, or clearly explain if
+1. **Desktop shell console window: eliminate, or clearly explain if
    elimination proves unsafe.** `Start-DesktopProcess` in
    `scripts/orchai-local-process-control.ps1` wraps the Desktop shell
    process in a visible `cmd.exe` window (`WindowStyle=Normal`,
